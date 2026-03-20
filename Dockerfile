@@ -174,7 +174,7 @@ COPY docker/supervisord.conf /etc/supervisord.conf
 # Variables de entorno por defecto
 ENV LITELLM_MODE=PRODUCTION
 ENV LITELLM_FORCE_ENTERPRISE=true
-ENV LITELLM_DISABLE_ENTERPRISE_INIT=false
+ENV LITELLM_DISABLE_ENTERPRISE_INIT=true
 
 # Health check para Dokploy
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \

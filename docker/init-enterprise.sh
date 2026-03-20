@@ -14,19 +14,28 @@ echo "=========================================="
 
 # Esperar a que el servidor esté listo
 echo "⏳ Esperando que LiteLLM esté listo..."
-MAX_ATTEMPTS=10
+MAX_ATTEMPTS=20
 ATTEMPT=0
 
 # Esperar inicial para que el servidor termine de iniciar completamente
-sleep 5
+sleep 10
 
 while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-    if curl -f -s http://localhost:4000/health > /dev/null 2>&1; then
+    echo "   🔍 Intento $ATTEMPT/$MAX_ATTEMPTS - Verificando http://127.0.0.1:4000/health..."
+    
+    # Debug: intentar curl con verbose
+    CURL_OUTPUT=$(curl -v -f -s http://127.0.0.1:4000/health 2>&1)
+    CURL_EXIT=$?
+    
+    if [ $CURL_EXIT -eq 0 ]; then
         echo "✅ LiteLLM está listo!"
         break
+    else
+        echo "   ❌ Curl falló con código: $CURL_EXIT"
+        echo "   📝 Output: $(echo "$CURL_OUTPUT" | head -n 3)"
     fi
+    
     ATTEMPT=$((ATTEMPT + 1))
-    echo "   Intento $ATTEMPT/$MAX_ATTEMPTS..."
     sleep 2
 done
 
@@ -42,7 +51,7 @@ echo "🔍 Verificando estado de Enterprise..."
 echo ""
 
 # Llamar al endpoint de health/license para verificar el estado
-RESPONSE=$(curl -s -f http://localhost:4000/health/license 2>/dev/null || echo "error")
+RESPONSE=$(curl -s -f http://127.0.0.1:4000/health/license 2>/dev/null || echo "error")
 
 if [ "$RESPONSE" = "error" ]; then
     echo "⚠️  No se pudo verificar el estado de la licencia"
@@ -93,12 +102,12 @@ fi
 echo "=========================================="
 echo ""
 echo "✨ Inicialización completada"
-echo "   LiteLLM Proxy está listo en http://localhost:4000"
+echo "   LiteLLM Proxy está listo en http://127.0.0.1:4000"
 echo ""
 echo "📊 Endpoints disponibles:"
-echo "   • Health: http://localhost:4000/health"
-echo "   • UI Admin: http://localhost:4000/ui"
-echo "   • API Docs: http://localhost:4000/docs"
+echo "   • Health: http://127.0.0.1:4000/health"
+echo "   • UI Admin: http://127.0.0.1:4000/ui"
+echo "   • API Docs: http://127.0.0.1:4000/docs"
 echo "   • License Info: http://localhost:4000/health/license"
 echo ""
 echo "=========================================="

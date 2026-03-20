@@ -2,15 +2,15 @@
 
 # Función para ejecutar el script de inicialización enterprise
 run_enterprise_init() {
-    # Esperar a que el servidor esté completamente listo
+    # Esperar a que el servidor esté completamente listo (incluyendo migraciones)
     echo "⏳ Esperando a que el servidor LiteLLM esté listo..."
-    sleep 8
+    sleep 20
     
     # Verificar que el servidor responda
     MAX_WAIT=20
     COUNT=0
     while [ $COUNT -lt $MAX_WAIT ]; do
-        if curl -f -s http://localhost:4000/health > /dev/null 2>&1; then
+        if curl -f -s http://127.0.0.1:4000/health > /dev/null 2>&1; then
             echo "✅ Servidor listo, ejecutando script de inicialización Enterprise..."
             break
         fi
