@@ -127,6 +127,8 @@ RUN prisma generate --schema=./litellm/proxy/schema.prisma
 # Convert Windows line endings to Unix for entrypoint scripts
 RUN sed -i 's/\r$//' docker/entrypoint.sh && chmod +x docker/entrypoint.sh
 RUN sed -i 's/\r$//' docker/prod_entrypoint.sh && chmod +x docker/prod_entrypoint.sh
+# Convert Windows line endings to Unix for enterprise init script
+RUN sed -i 's/\r$//' docker/init-enterprise.sh && chmod +x docker/init-enterprise.sh
 
 EXPOSE 4000/tcp
 
@@ -138,15 +140,16 @@ COPY docker/supervisord.conf /etc/supervisord.conf
 # =================================================================
 # Variables de entorno recomendadas (configurar en Dokploy):
 #
-# ENTERPRISE HABILITADO SIN LICENCIA:
-# - LITELLM_FORCE_ENTERPRISE=true
+# ✅ ENTERPRISE ACTIVADO POR DEFECTO:
+# - LITELLM_FORCE_ENTERPRISE=true (YA CONFIGURADO)
 #     Habilita todas las características Enterprise sin necesidad de licencia
 #     NOTA: Esto es para uso personal/desarrollo. Para uso comercial,
 #     obtén una licencia en: https://www.litellm.ai/enterprise
 #
-# OPCIONAL para Enterprise con licencia:
+# OPCIONAL para Enterprise con licencia comercial:
 # - LITELLM_LICENSE=<tu-licencia-enterprise>
 #     Si tienes una licencia comercial, úsala en lugar de FORCE_ENTERPRISE
+#     (Configurar esto desactivará FORCE_ENTERPRISE automáticamente)
 #
 # RECOMENDADO para producción:
 # - DATABASE_URL=postgresql://user:pass@host:5432/litellm
@@ -164,11 +167,14 @@ COPY docker/supervisord.conf /etc/supervisord.conf
 #     Para proteger el Admin UI
 # - LITELLM_MODE=PRODUCTION
 #     Modo de operación
+# - LITELLM_DISABLE_ENTERPRISE_INIT=true
+#     Para desactivar el script de inicialización enterprise
 # =================================================================
 
 # Variables de entorno por defecto
 ENV LITELLM_MODE=PRODUCTION
 ENV LITELLM_FORCE_ENTERPRISE=true
+ENV LITELLM_DISABLE_ENTERPRISE_INIT=false
 
 # Health check para Dokploy
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
