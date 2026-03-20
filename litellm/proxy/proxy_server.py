@@ -742,6 +742,33 @@ async def proxy_startup_event(app: FastAPI):  # noqa: PLR0915
     )
     if premium_user is False:
         premium_user = _license_check.is_premium()
+    
+    # Mostrar estado de Enterprise en los logs
+    if premium_user:
+        force_enterprise = os.getenv("LITELLM_FORCE_ENTERPRISE", "false").lower() == "true"
+        if force_enterprise:
+            verbose_proxy_logger.info(
+                "\n" + "="*60 + "\n" +
+                "🚀 LITELLM ENTERPRISE MODE: ENABLED (Force Mode)\n" +
+                "   All Enterprise features are activated\n" +
+                "   Mode: LITELLM_FORCE_ENTERPRISE=true\n" +
+                "="*60
+            )
+        else:
+            verbose_proxy_logger.info(
+                "\n" + "="*60 + "\n" +
+                "✨ LITELLM ENTERPRISE MODE: ENABLED (Licensed)\n" +
+                "   All Enterprise features are activated\n" +
+                "="*60
+            )
+    else:
+        verbose_proxy_logger.info(
+            "\n" + "="*60 + "\n" +
+            "📦 LITELLM OPEN SOURCE MODE\n" +
+            "   Enterprise features are not available\n" +
+            "   Set LITELLM_FORCE_ENTERPRISE=true to enable\n" +
+            "="*60
+        )
 
     ## CHECK MASTER KEY IN ENVIRONMENT ##
     master_key = get_secret_str("LITELLM_MASTER_KEY")
