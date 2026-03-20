@@ -19,15 +19,15 @@ services:
     image: postgres:15-alpine
     container_name: litellm-postgres
     environment:
-      POSTGRES_DB: litellm
-      POSTGRES_USER: litellm
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme123}
+      POSTGRES_DB: ${DB_POSTGRESDB_DATABASE:-litellm}
+      POSTGRES_USER: ${DB_POSTGRESDB_USER:-litellm}
+      POSTGRES_PASSWORD: ${DB_POSTGRESDB_PASSWORD:-changeme123}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U litellm"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_POSTGRESDB_USER:-litellm}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -60,20 +60,37 @@ services:
     ports:
       - "4000:4000"
     environment:
-      # ===== ENTERPRISE LICENSE =====
-      LITELLM_LICENSE: ${LITELLM_LICENSE}
+      # ===== ENTERPRISE (ELIGE UNA OPCIÓN) =====
+      # OPCIÓN 1: Sin licencia (uso personal/desarrollo)
+      LITELLM_FORCE_ENTERPRISE: "true"
+      
+      # OPCIÓN 2: Con licencia comercial (descomentar si la tienes)
+      # LITELLM_LICENSE: ${LITELLM_LICENSE}
       
       # ===== AUTENTICACIÓN =====
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-1234567890abcdef}
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:-random-32-char-string-for-encryption}
       
-      # ===== BASE DE DATOS =====
-      DATABASE_URL: postgresql://litellm:${DB_PASSWORD:-changeme123}@postgres:5432/litellm
+      # ===== BASE DE DATOS (opción 1: variables separadas) =====
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: ${DB_POSTGRESDB_HOST:-postgres}
+      DB_POSTGRESDB_PORT: ${DB_POSTGRESDB_PORT:-5432}
+      DB_POSTGRESDB_DATABASE: ${DB_POSTGRESDB_DATABASE:-litellm}
+      DB_POSTGRESDB_USER: ${DB_POSTGRESDB_USER:-litellm}
+      DB_POSTGRESDB_PASSWORD: ${DB_POSTGRESDB_PASSWORD:-changeme123}
+      
+      # ===== BASE DE DATOS (opción 2: URL completa - si prefieres) =====
+      # Se construye automáticamente desde las variables de arriba, pero puedes sobreescribirla:
+      DATABASE_URL: postgresql://${DB_POSTGRESDB_USER:-litellm}:${DB_POSTGRESDB_PASSWORD:-changeme123}@${DB_POSTGRESDB_HOST:-postgres}:${DB_POSTGRESDB_PORT:-5432}/${DB_POSTGRESDB_DATABASE:-litellm}
       USE_PRISMA_MIGRATE: "True"
       
       # ===== CONFIGURACIÓN GENERAL =====
-      LITELLM_MODE: PRODUCTION
+      LITELLM_MODE: ${LITELLM_MODE:-PRODUCTION}
       STORE_MODEL_IN_DB: "True"
+      
+      # ===== TIMEZONE =====
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-America/Bogota}
+      TZ: ${TZ:-America/Bogota}
       
       # ===== ADMIN UI =====
       UI_USERNAME: ${UI_USERNAME:-admin}

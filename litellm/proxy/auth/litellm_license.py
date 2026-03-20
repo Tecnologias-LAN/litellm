@@ -97,8 +97,18 @@ class LicenseCheck:
         """
         1. verify_license_without_api_request: checks if license was generate using private / public key pair
         2. _verify: checks if license is valid calling litellm API. This is the old way we were generating/validating license
+        
+        NOTA: Si LITELLM_FORCE_ENTERPRISE=true está configurado, se habilita Enterprise sin licencia
         """
         try:
+            # MODIFICACIÓN: Permitir forzar Enterprise mode sin licencia
+            force_enterprise = os.getenv("LITELLM_FORCE_ENTERPRISE", "false").lower() == "true"
+            if force_enterprise:
+                verbose_proxy_logger.info(
+                    "litellm.proxy.auth.litellm_license.py::is_premium() - ENTERPRISE FORZADO activado vía LITELLM_FORCE_ENTERPRISE=true"
+                )
+                return True
+            
             verbose_proxy_logger.debug(
                 "litellm.proxy.auth.litellm_license.py::is_premium() - ENTERING 'IS_PREMIUM' - LiteLLM License={}".format(
                     self.license_str

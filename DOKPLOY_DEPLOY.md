@@ -5,8 +5,9 @@ Esta guía te ayudará a desplegar LiteLLM Proxy con Enterprise habilitado en Do
 ## 📋 Requisitos Previos
 
 1. **Cuenta de Dokploy** activa y funcionando
-2. **Licencia Enterprise de LiteLLM** (opcional pero recomendado)
-   - Obtén una licencia aquí: https://www.litellm.ai/enterprise
+2. **Licencia Enterprise de LiteLLM** (OPCIONAL - puede habilitarse sin licencia)
+   - **NUEVO**: Puedes usar `LITELLM_FORCE_ENTERPRISE=true` para habilitar todas las características sin licencia
+   - Para uso comercial, obtén una licencia aquí: https://www.litellm.ai/enterprise
    - Trial gratuito de 7 días: https://www.litellm.ai/enterprise#trial
 3. **Base de datos PostgreSQL** (recomendado para producción)
 4. **API Keys** de los proveedores LLM que vas a usar (OpenAI, Anthropic, Azure, etc.)
@@ -31,12 +32,25 @@ En la configuración de Build de Dokploy:
 
 En la sección de Variables de Entorno de Dokploy, configura las siguientes variables:
 
-#### ✨ Variables REQUERIDAS para Enterprise:
+#### ✨ Variables para habilitar Enterprise:
+
+**OPCIÓN 1: SIN LICENCIA (Recomendado para uso personal/desarrollo)**
 
 ```bash
-# Licencia Enterprise (IMPORTANTE)
-LITELLM_LICENSE=eyJ...tu-licencia-aqui...
+# Habilitar Enterprise sin licencia comercial
+LITELLM_FORCE_ENTERPRISE=true
+```
 
+**OPCIÓN 2: CON LICENCIA COMERCIAL**
+
+```bash
+# Si tienes licencia comercial de LiteLLM
+LITELLM_LICENSE=eyJ...tu-licencia-aqui...
+```
+
+#### 🔑 Variables REQUERIDAS adicionales:
+
+```bash
 # Master Key para autenticación de admin
 LITELLM_MASTER_KEY=sk-1234567890abcdef
 
@@ -214,10 +228,10 @@ Una vez desplegado con `LITELLM_LICENSE`, tienes acceso a:
 
 ### El Swagger no muestra "Enterprise Edition"
 
-1. Verifica que `LITELLM_LICENSE` esté configurada correctamente
-2. Verifica que la licencia no haya expirado
-3. Reinicia el contenedor completamente
-4. Revisa los logs: `docker logs <container-id>`
+1. Verifica que `LITELLM_FORCE_ENTERPRISE=true` esté configurada (o `LITELLM_LICENSE` si usas licencia)
+2. Reinicia el contenedor completamente
+3. Revisa los logs: `docker logs <container-id>` y busca mensajes sobre Enterprise
+4. Verifica que no haya errores de sintaxis en las variables de entorno
 
 ### Errores de Base de Datos
 

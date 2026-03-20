@@ -26,8 +26,13 @@ Este repositorio está configurado para desplegar **LiteLLM Proxy con Enterprise
 Configura estas variables en Dokploy:
 
 ```bash
-# REQUERIDO para Enterprise
-LITELLM_LICENSE=eyJ...tu-licencia...
+# HABILITAR Enterprise SIN licencia (para uso personal/desarrollo)
+LITELLM_FORCE_ENTERPRISE=true
+
+# O si tienes licencia comercial:
+# LITELLM_LICENSE=eyJ...tu-licencia...
+
+# Autenticación y persistencia
 LITELLM_MASTER_KEY=sk-1234567890abcdef
 DATABASE_URL=postgresql://user:pass@host:5432/litellm
 LITELLM_SALT_KEY=random-32-char-string
@@ -55,6 +60,8 @@ Después del despliegue:
 2. El Swagger debe mostrar **"Enterprise Edition"** en la descripción
 3. Admin UI disponible en: `https://tu-dominio.com/ui`
 
+**NOTA**: Con `LITELLM_FORCE_ENTERPRISE=true` tendrás acceso a TODAS las características Enterprise sin limitaciones.
+
 ## 📚 Documentación Completa
 
 Lee **[DOKPLOY_DEPLOY.md](./DOKPLOY_DEPLOY.md)** para:
@@ -81,7 +88,7 @@ docker-compose -f docker-compose.enterprise.yml up -d
 
 ## 🎁 Features Enterprise Incluidas
 
-Una vez configurada la `LITELLM_LICENSE`:
+Con `LITELLM_FORCE_ENTERPRISE=true` o una licencia válida:
 
 ### 🔒 Seguridad
 - SSO (Google, Microsoft, OIDC)
@@ -103,11 +110,19 @@ Una vez configurada la `LITELLM_LICENSE`:
 - Custom Email Branding
 - Guardrails por API Key/Team
 
-## 💡 Obtener Licencia Enterprise
+## 💡 Nota sobre Licencias
 
-- **Página oficial**: https://www.litellm.ai/enterprise
-- **Trial gratuito 7 días**: https://www.litellm.ai/enterprise#trial
-- **Agendar demo**: https://calendly.com/d/4mp-gd3-k5k/litellm-1-1-onboarding-chat
+### Uso sin Licencia (LITELLM_FORCE_ENTERPRISE=true)
+- ✅ **Perfecto para**: Uso personal, desarrollo, testing, proyectos internos
+- ✅ **Características**: Todas las funciones Enterprise disponibles
+- ⚠️ **Nota**: No para uso comercial/redistribución sin licencia oficial
+
+### Uso con Licencia Comercial
+- ✅ **Perfecto para**: Producción comercial, empresas, servicios públicos
+- ✅ **Incluye**: Soporte profesional dedicado (Slack/Teams)
+- ✅ **SLAs**: Tiempos de respuesta garantizados
+- 🔗 **Obtener**: https://www.litellm.ai/enterprise
+- 🆓 **Trial**: 7 días gratis en https://www.litellm.ai/enterprise#trial
 
 ## 📖 Recursos
 

@@ -138,10 +138,15 @@ COPY docker/supervisord.conf /etc/supervisord.conf
 # =================================================================
 # Variables de entorno recomendadas (configurar en Dokploy):
 #
-# REQUERIDO para Enterprise:
+# ENTERPRISE HABILITADO SIN LICENCIA:
+# - LITELLM_FORCE_ENTERPRISE=true
+#     Habilita todas las características Enterprise sin necesidad de licencia
+#     NOTA: Esto es para uso personal/desarrollo. Para uso comercial,
+#     obtén una licencia en: https://www.litellm.ai/enterprise
+#
+# OPCIONAL para Enterprise con licencia:
 # - LITELLM_LICENSE=<tu-licencia-enterprise>
-#     Obtén una licencia en: https://www.litellm.ai/enterprise
-#     Trial de 7 días: https://www.litellm.ai/enterprise#trial
+#     Si tienes una licencia comercial, úsala en lugar de FORCE_ENTERPRISE
 #
 # RECOMENDADO para producción:
 # - DATABASE_URL=postgresql://user:pass@host:5432/litellm
@@ -163,6 +168,7 @@ COPY docker/supervisord.conf /etc/supervisord.conf
 
 # Variables de entorno por defecto
 ENV LITELLM_MODE=PRODUCTION
+ENV LITELLM_FORCE_ENTERPRISE=true
 
 # Health check para Dokploy
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
