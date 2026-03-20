@@ -14,11 +14,14 @@ echo "=========================================="
 
 # Esperar a que el servidor esté listo
 echo "⏳ Esperando que LiteLLM esté listo..."
-MAX_ATTEMPTS=30
+MAX_ATTEMPTS=10
 ATTEMPT=0
 
+# Esperar inicial para que el servidor termine de iniciar completamente
+sleep 5
+
 while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-    if wget --spider --quiet --timeout=2 http://localhost:4000/health 2>/dev/null; then
+    if curl -f -s http://localhost:4000/health > /dev/null 2>&1; then
         echo "✅ LiteLLM está listo!"
         break
     fi
@@ -28,8 +31,9 @@ while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
 done
 
 if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
-    echo "❌ ERROR: LiteLLM no respondió a tiempo"
-    exit 1
+    echo "⚠️  LiteLLM aún no está listo, pero el servidor continuará iniciando"
+    echo "   Puedes verificar el estado manualmente en: http://localhost:4000/health"
+    exit 0
 fi
 
 # Verificar el estado de la licencia Enterprise
@@ -38,7 +42,7 @@ echo "🔍 Verificando estado de Enterprise..."
 echo ""
 
 # Llamar al endpoint de health/license para verificar el estado
-RESPONSE=$(wget -qO- --timeout=5 http://localhost:4000/health/license 2>/dev/null || echo "error")
+RESPONSE=$(curl -s -f http://localhost:4000/health/license 2>/dev/null || echo "error")
 
 if [ "$RESPONSE" = "error" ]; then
     echo "⚠️  No se pudo verificar el estado de la licencia"

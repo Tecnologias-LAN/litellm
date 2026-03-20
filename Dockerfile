@@ -178,7 +178,7 @@ ENV LITELLM_DISABLE_ENTERPRISE_INIT=false
 
 # Health check para Dokploy
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:4000/health || exit 1
+    CMD curl -f -s http://localhost:4000/health || exit 1
 
 ENTRYPOINT ["docker/prod_entrypoint.sh"]
 
