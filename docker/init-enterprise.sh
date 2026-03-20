@@ -1,68 +1,13 @@
 #!/bin/sh
 # =================================================================
 # LiteLLM Enterprise Initialization Script
-# Similar to n8n's docker-init-enterprise.sh
 # =================================================================
-# Este script valida y confirma que Enterprise está activado
-# cuando LITELLM_FORCE_ENTERPRISE=true está configurado
-
-set -e
-
-echo "=========================================="
-echo "🚀 LiteLLM Enterprise Initialization"
-echo "=========================================="
-
-# Esperar a que el servidor esté listo
-echo "⏳ Esperando que LiteLLM esté listo..."
-MAX_ATTEMPTS=20
-ATTEMPT=0
-
-# Esperar inicial para que el servidor termine de iniciar completamente
-sleep 10
-
-while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-    echo "   🔍 Intento $ATTEMPT/$MAX_ATTEMPTS - Verificando http://127.0.0.1:4000/health..."
-    
-    # Debug: intentar curl con verbose
-    CURL_OUTPUT=$(curl -v -f -s http://127.0.0.1:4000/health 2>&1)
-    CURL_EXIT=$?
-    
-    if [ $CURL_EXIT -eq 0 ]; then
-        echo "✅ LiteLLM está listo!"
-        break
-    else
-        echo "   ❌ Curl falló con código: $CURL_EXIT"
-        echo "   📝 Output: $(echo "$CURL_OUTPUT" | head -n 3)"
-    fi
-    
-    ATTEMPT=$((ATTEMPT + 1))
-    sleep 2
-done
-
-if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
-    echo "⚠️  LiteLLM aún no está listo, pero el servidor continuará iniciando"
-    echo "   Puedes verificar el estado manualmente en: http://localhost:4000/health"
-    exit 0
-fi
-
-# Verificar el estado de la licencia Enterprise
-echo ""
-echo "🔍 Verificando estado de Enterprise..."
-echo ""
-
-# Llamar al endpoint de health/license para verificar el estado
-RESPONSE=$(curl -s -f http://127.0.0.1:4000/health/license 2>/dev/null || echo "error")
-
-if [ "$RESPONSE" = "error" ]; then
-    echo "⚠️  No se pudo verificar el estado de la licencia"
-    echo "   El servidor está corriendo pero el endpoint puede no estar disponible"
-else
-    echo "📋 Estado de la licencia:"
-    echo "$RESPONSE" | head -n 20
-fi
 
 echo ""
 echo "=========================================="
+echo "🚀 LiteLLM Enterprise Status"
+echo "=========================================="
+echo ""
 
 # Verificar si LITELLM_FORCE_ENTERPRISE está activado
 if [ "$LITELLM_FORCE_ENTERPRISE" = "true" ]; then
@@ -94,22 +39,10 @@ else
     echo ""
     echo "   Para activar Enterprise sin licencia (desarrollo):"
     echo "   Configura: LITELLM_FORCE_ENTERPRISE=true"
-    echo ""
-    echo "   Para uso comercial con licencia:"
-    echo "   Configura: LITELLM_LICENSE=tu-licencia-aqui"
 fi
 
-echo "=========================================="
-echo ""
-echo "✨ Inicialización completada"
-echo "   LiteLLM Proxy está listo en http://127.0.0.1:4000"
-echo ""
-echo "📊 Endpoints disponibles:"
-echo "   • Health: http://127.0.0.1:4000/health"
-echo "   • UI Admin: http://127.0.0.1:4000/ui"
-echo "   • API Docs: http://127.0.0.1:4000/docs"
-echo "   • License Info: http://localhost:4000/health/license"
 echo ""
 echo "=========================================="
+echo ""
 
 exit 0
