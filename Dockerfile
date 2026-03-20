@@ -137,9 +137,9 @@ COPY docker/supervisord.conf /etc/supervisord.conf
 ENV LITELLM_MODE=PRODUCTION
 ENV LITELLM_FORCE_ENTERPRISE=true
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f -s http://localhost:4000/health || exit 1
+# Health check disabled - Dokploy will use port check instead
+# HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+#     CMD curl -f -s http://localhost:4000/health || exit 1
 
 ENTRYPOINT ["docker/prod_entrypoint.sh"]
 
