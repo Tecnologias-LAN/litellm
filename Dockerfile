@@ -127,62 +127,20 @@ RUN prisma generate --schema=./litellm/proxy/schema.prisma
 # Convert Windows line endings to Unix for entrypoint scripts
 RUN sed -i 's/\r$//' docker/entrypoint.sh && chmod +x docker/entrypoint.sh
 RUN sed -i 's/\r$//' docker/prod_entrypoint.sh && chmod +x docker/prod_entrypoint.sh
-# Convert Windows line endings to Unix for enterprise init script
-RUN sed -i 's/\r$//' docker/init-enterprise.sh && chmod +x docker/init-enterprise.sh
 
 EXPOSE 4000/tcp
 
 RUN apk add --no-cache supervisor
 COPY docker/supervisord.conf /etc/supervisord.conf
 
-# =================================================================
-# CONFIGURACIÓN PARA DOKPLOY
-# =================================================================
-# Variables de entorno recomendadas (configurar en Dokploy):
-#
-# ✅ ENTERPRISE ACTIVADO POR DEFECTO:
-# - LITELLM_FORCE_ENTERPRISE=true (YA CONFIGURADO)
-#     Habilita todas las características Enterprise sin necesidad de licencia
-#     NOTA: Esto es para uso personal/desarrollo. Para uso comercial,
-#     obtén una licencia en: https://www.litellm.ai/enterprise
-#
-# OPCIONAL para Enterprise con licencia comercial:
-# - LITELLM_LICENSE=<tu-licencia-enterprise>
-#     Si tienes una licencia comercial, úsala en lugar de FORCE_ENTERPRISE
-#     (Configurar esto desactivará FORCE_ENTERPRISE automáticamente)
-#
-# RECOMENDADO para producción:
-# - DATABASE_URL=postgresql://user:pass@host:5432/litellm
-#     Para persistencia de datos, keys, teams, etc.
-# - LITELLM_MASTER_KEY=sk-<tu-master-key-segura>
-#     Key maestra para autenticación de admin
-# - LITELLM_SALT_KEY=<random-string-32-chars>
-#     Para encriptar keys en la base de datos
-#
-# OPCIONAL:
-# - STORE_MODEL_IN_DB=True
-#     Para guardar configuración de modelos en DB
-# - UI_USERNAME=admin
-# - UI_PASSWORD=<password-seguro>
-#     Para proteger el Admin UI
-# - LITELLM_MODE=PRODUCTION
-#     Modo de operación
-# - LITELLM_DISABLE_ENTERPRISE_INIT=true
-#     Para desactivar el script de inicialización enterprise
-# =================================================================
-
-# Variables de entorno por defecto
+# Enterprise mode enabled by default
 ENV LITELLM_MODE=PRODUCTION
 ENV LITELLM_FORCE_ENTERPRISE=true
-ENV LITELLM_DISABLE_ENTERPRISE_INIT=true
 
-# Health check para Dokploy
+# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f -s http://localhost:4000/health || exit 1
 
 ENTRYPOINT ["docker/prod_entrypoint.sh"]
 
-# Comando por defecto
-# Para habilitar logs detallados de debug, cambiar a: ["--port", "4000", "--detailed_debug"]
-# Para usar un archivo de configuración: ["--port", "4000", "--config", "/app/config.yaml"]
 CMD ["--port", "4000"]
