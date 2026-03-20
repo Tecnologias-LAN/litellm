@@ -1,3 +1,18 @@
+# =================================================================
+# LiteLLM Proxy Dockerfile - Optimizado para Dokploy
+# Con soporte completo para Enterprise Features
+# =================================================================
+# 
+# Este Dockerfile incluye:
+# - Código Enterprise (directorio /enterprise)
+# - Admin UI personalizable
+# - Todas las dependencias necesarias
+#
+# Para habilitar Enterprise:
+# - Configura LITELLM_LICENSE en las variables de entorno de Dokploy
+# - Opcionalmente configura DATABASE_URL y LITELLM_MASTER_KEY
+# =================================================================
+
 # Base image for building
 ARG LITELLM_BUILD_IMAGE=cgr.dev/chainguard/wolfi-base
 
@@ -18,9 +33,10 @@ RUN apk add --no-cache bash gcc py3-pip python3 python3-dev openssl openssl-dev
 RUN python -m pip install build
 
 # Copy the current directory contents into the container at /app
+# Esto incluye el directorio /enterprise con todas las características enterprise
 COPY . .
 
-# Build Admin UI
+# Build Admin UI (incluye UI Enterprise si enterprise/enterprise_ui/enterprise_colors.json existe)
 # Convert Windows line endings to Unix and make executable
 RUN sed -i 's/\r$//' docker/build_admin_ui.sh && chmod +x docker/build_admin_ui.sh && ./docker/build_admin_ui.sh
 
@@ -67,7 +83,9 @@ RUN apk add --no-cache bash openssl tzdata nodejs npm python3 py3-pip libsndfile
     npm cache clean --force
 
 WORKDIR /app
+
 # Copy the current directory contents into the container at /app
+# Incluye el directorio /enterprise para funcionalidades enterprise
 COPY . .
 RUN ls -la /app
 
@@ -115,7 +133,44 @@ EXPOSE 4000/tcp
 RUN apk add --no-cache supervisor
 COPY docker/supervisord.conf /etc/supervisord.conf
 
+# =================================================================
+# CONFIGURACIÓN PARA DOKPLOY
+# =================================================================
+# Variables de entorno recomendadas (configurar en Dokploy):
+#
+# REQUERIDO para Enterprise:
+# - LITELLM_LICENSE=<tu-licencia-enterprise>
+#     Obtén una licencia en: https://www.litellm.ai/enterprise
+#     Trial de 7 días: https://www.litellm.ai/enterprise#trial
+#
+# RECOMENDADO para producción:
+# - DATABASE_URL=postgresql://user:pass@host:5432/litellm
+#     Para persistencia de datos, keys, teams, etc.
+# - LITELLM_MASTER_KEY=sk-<tu-master-key-segura>
+#     Key maestra para autenticación de admin
+# - LITELLM_SALT_KEY=<random-string-32-chars>
+#     Para encriptar keys en la base de datos
+#
+# OPCIONAL:
+# - STORE_MODEL_IN_DB=True
+#     Para guardar configuración de modelos en DB
+# - UI_USERNAME=admin
+# - UI_PASSWORD=<password-seguro>
+#     Para proteger el Admin UI
+# - LITELLM_MODE=PRODUCTION
+#     Modo de operación
+# =================================================================
+
+# Variables de entorno por defecto
+ENV LITELLM_MODE=PRODUCTION
+
+# Health check para Dokploy
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:4000/health || exit 1
+
 ENTRYPOINT ["docker/prod_entrypoint.sh"]
 
-# Append "--detailed_debug" to the end of CMD to view detailed debug logs
+# Comando por defecto
+# Para habilitar logs detallados de debug, cambiar a: ["--port", "4000", "--detailed_debug"]
+# Para usar un archivo de configuración: ["--port", "4000", "--config", "/app/config.yaml"]
 CMD ["--port", "4000"]
