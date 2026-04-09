@@ -3025,5 +3025,23 @@
       }
     ],
     "default_model_placeholder": "gpt-3.5-turbo"
+  },
+  {
+    "provider": "ZAI",
+    "provider_display_name": "Z.AI (GLM)",
+    "litellm_provider": "zai",
+    "credential_fields": [
+      {
+        "key": "api_key",
+        "label": "API Key",
+        "placeholder": null,
+        "tooltip": "Your Z.AI API Key (ZAI_API_KEY)",
+        "required": true,
+        "field_type": "password",
+        "options": null,
+        "default_value": null
+      }
+    ],
+    "default_model_placeholder": "zai/glm-4.7"
   }
 ]

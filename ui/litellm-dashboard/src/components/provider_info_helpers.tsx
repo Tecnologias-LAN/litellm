@@ -44,6 +44,7 @@ export enum Providers {
   xAI = "xAI",
   SAP = "SAP Generative AI Hub",
   Watsonx = "Watsonx",
+  ZAI = "Z.AI (GLM)",
 }
 
 export const provider_map: Record<string, string> = {
@@ -92,6 +93,7 @@ export const provider_map: Record<string, string> = {
   Infinity: "infinity",
   SAP: "sap",
   Watsonx: "watsonx",
+  ZAI: "zai",
 };
 
 const asset_logos_folder = "../ui/assets/logos/";
@@ -206,6 +208,8 @@ export const getPlaceholder = (selectedProvider: string): string => {
     return "runwayml/gen4_turbo";
   } else if (selectedProvider === Providers.Watsonx) {
     return "watsonx/ibm/granite-3-3-8b-instruct";
+  } else if (selectedProvider === Providers.ZAI) {
+    return "zai/glm-4.7";
   } else {
     return "gpt-3.5-turbo";
   }
