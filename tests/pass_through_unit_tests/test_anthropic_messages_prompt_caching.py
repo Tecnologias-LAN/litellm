@@ -11,10 +11,7 @@ Per AWS docs (https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-cachin
 - Claude 3.5 Haiku: GA, 2048 min tokens
 """
 
-import os
-import sys
 
-sys.path.insert(0, os.path.abspath("../../.."))
 
 import pytest
 from base_anthropic_messages_prompt_caching_test import (
@@ -25,22 +22,22 @@ from base_anthropic_messages_prompt_caching_test import (
 class TestBedrockConversePromptCaching(BaseAnthropicMessagesPromptCachingTest):
     """
     E2E tests for prompt caching with Bedrock Converse API.
-    
+
     Uses the bedrock/converse/ prefix which routes through litellm.completion()
     and the AmazonConverseConfig transformation.
     """
 
     def get_model(self) -> str:
-        return "bedrock/converse/us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+        return "bedrock/converse/us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 
 
 class TestBedrockInvokePromptCaching(BaseAnthropicMessagesPromptCachingTest):
     """
     E2E tests for prompt caching with Bedrock Invoke API.
-    
+
     Uses the bedrock/invoke/ prefix which routes through the native
     Anthropic Messages API format.
     """
 
     def get_model(self) -> str:
-        return "bedrock/invoke/us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+        return "bedrock/invoke/us.anthropic.claude-sonnet-4-5-20250929-v1:0"

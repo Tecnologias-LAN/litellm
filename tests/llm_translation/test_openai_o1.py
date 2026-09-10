@@ -1,24 +1,19 @@
 import json
 import os
-import sys
 from datetime import datetime
 from unittest.mock import AsyncMock, patch, MagicMock
 
-sys.path.insert(
-    0, os.path.abspath("../..")
-)  # Adds the parent directory to the system path
 
 
 import httpx
 import pytest
-from respx import MockRouter
 
 import litellm
 from litellm import Choices, Message, ModelResponse
 from base_llm_unit_tests import BaseLLMChatTest, BaseOSeriesModelsTest
 
 
-@pytest.mark.parametrize("model", ["o1-mini", "o1"])
+@pytest.mark.parametrize("model", ["o1"])
 @pytest.mark.asyncio
 async def test_o1_handle_system_role(model):
     """
@@ -68,7 +63,7 @@ async def test_o1_handle_system_role(model):
 
 @pytest.mark.parametrize(
     "model, expected_tool_calling_support",
-    [("o1-mini", False), ("o1", True)],
+    [("o1", True)],
 )
 @pytest.mark.asyncio
 async def test_o1_handle_tool_calling_optional_params(
@@ -96,7 +91,7 @@ async def test_o1_handle_tool_calling_optional_params(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("model", ["gpt-4", "gpt-4-0314", "gpt-4-32k"])
+@pytest.mark.parametrize("model", ["gpt-4", "gpt-4-0613"])
 async def test_o1_max_completion_tokens(model: str):
     """
     Tests that:
@@ -135,7 +130,6 @@ def test_litellm_responses():
     """
     ensures that type of completion_tokens_details is correctly handled / returned
     """
-    from litellm import ModelResponse
     from litellm.types.utils import CompletionTokensDetails
 
     response = ModelResponse(

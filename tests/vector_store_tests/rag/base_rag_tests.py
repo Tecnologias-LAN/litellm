@@ -4,15 +4,12 @@ Base RAG test class that enforces common tests across all providers.
 Providers should inherit from BaseRAGTest and implement the abstract methods.
 """
 
-import os
-import sys
 import uuid
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 
 import pytest
 
-sys.path.insert(0, os.path.abspath("../../.."))
 
 import litellm
 from litellm.types.rag import (
@@ -124,7 +121,9 @@ class BaseRAGTest(ABC):
         Test document {unique_id} for RAG ingestion and query.
         LiteLLM provides a unified interface for 100+ LLMs.
         This content should be retrievable via semantic search.
-        """.encode("utf-8")
+        """.encode(
+            "utf-8"
+        )
         file_data = (filename, text_content, "text/plain")
 
         ingest_options = self.get_base_ingest_options()
@@ -170,4 +169,3 @@ class BaseRAGTest(ABC):
 
         except litellm.InternalServerError:
             pytest.skip("Skipping test due to litellm.InternalServerError")
-

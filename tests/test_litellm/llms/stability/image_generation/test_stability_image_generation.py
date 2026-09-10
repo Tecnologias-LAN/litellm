@@ -83,7 +83,7 @@ class TestStabilityImageGenerationConfig:
         non_default_params = {"unsupported_param": "value"}
         optional_params = {}
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ValueError, match="Supported parameters are \\['n', 'size',") as exc_info:
             self.config.map_openai_params(
                 non_default_params=non_default_params,
                 optional_params=optional_params,
@@ -168,7 +168,7 @@ class TestStabilityImageGenerationConfig:
 
     def test_validate_environment_raises_without_api_key(self):
         """Test that validate_environment raises error without API key"""
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ValueError, match='STABILITY_API_KEY is not set\\. Please set it via') as exc_info:
             self.config.validate_environment(
                 headers={},
                 model="stability/sd3",
@@ -251,7 +251,7 @@ class TestStabilityImageGenerationConfig:
         model_response = ImageResponse(data=[])
         mock_logging = MagicMock()
 
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(Exception, match='Content was filtered by Stability AI safety systems') as exc_info:
             self.config.transform_image_generation_response(
                 model="stability/sd3",
                 raw_response=mock_response,
@@ -303,12 +303,21 @@ class TestStabilityGenerationModels:
         """Test that SD3 models use the SD3 endpoint"""
         sd3_models = ["sd3", "sd3-large", "sd3-medium", "sd3.5-large"]
         for model in sd3_models:
-            assert STABILITY_GENERATION_MODELS[model] == "/v2beta/stable-image/generate/sd3"
+            assert (
+                STABILITY_GENERATION_MODELS[model]
+                == "/v2beta/stable-image/generate/sd3"
+            )
 
     def test_ultra_model_uses_ultra_endpoint(self):
         """Test that Ultra model uses ultra endpoint"""
-        assert STABILITY_GENERATION_MODELS["stable-image-ultra"] == "/v2beta/stable-image/generate/ultra"
+        assert (
+            STABILITY_GENERATION_MODELS["stable-image-ultra"]
+            == "/v2beta/stable-image/generate/ultra"
+        )
 
     def test_core_model_uses_core_endpoint(self):
         """Test that Core model uses core endpoint"""
-        assert STABILITY_GENERATION_MODELS["stable-image-core"] == "/v2beta/stable-image/generate/core"
+        assert (
+            STABILITY_GENERATION_MODELS["stable-image-core"]
+            == "/v2beta/stable-image/generate/core"
+        )

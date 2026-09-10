@@ -3,13 +3,10 @@ import traceback
 from dotenv import load_dotenv
 
 load_dotenv()
-import os, io
+import io
 
 # this file is to test litellm/proxy
 
-sys.path.insert(
-    0, os.path.abspath("../..")
-)  # Adds the parent directory to the system path
 import pytest, logging, asyncio
 import litellm
 from litellm import embedding, completion, completion_cost, Timeout
@@ -24,7 +21,6 @@ logging.basicConfig(
 # test /chat/completion request to the proxy
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
-import os
 from litellm.proxy.proxy_server import (
     router,
     save_worker_config,
@@ -53,6 +49,11 @@ def client_no_auth():
     return TestClient(app)
 
 
+@pytest.mark.skipif(
+    os.environ.get("AZURE_AI_API_KEY") is None
+    or os.environ.get("OPENAI_API_KEY") is None,
+    reason="AZURE_AI_API_KEY or OPENAI_API_KEY not set - skipping integration test",
+)
 def test_chat_completion(client_no_auth):
     global headers
 
@@ -65,9 +66,9 @@ def test_chat_completion(client_no_auth):
                 model_name="user-azure-instance",
                 litellm_params=CompletionRequest(
                     model="azure/gpt-4.1-mini",
-                    api_key=os.getenv("AZURE_API_KEY"),
+                    api_key=os.getenv("AZURE_AI_API_KEY"),
                     api_version=os.getenv("AZURE_API_VERSION"),
-                    api_base=os.getenv("AZURE_API_BASE"),
+                    api_base=os.getenv("AZURE_AI_API_BASE"),
                     timeout=10,
                 ),
                 tpm=240000,

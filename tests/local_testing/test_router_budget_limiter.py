@@ -4,11 +4,8 @@ import traceback
 from dotenv import load_dotenv
 
 load_dotenv()
-import os, copy
+import copy
 
-sys.path.insert(
-    0, os.path.abspath("../..")
-)  # Adds the parent directory to the system-path
 import pytest
 from litellm import Router
 from litellm.router_strategy.budget_limiter import RouterBudgetLimiting
@@ -75,9 +72,9 @@ async def test_provider_budgets_e2e_test():
                 "model_name": "gpt-3.5-turbo",  # openai model name
                 "litellm_params": {  # params for litellm completion/embedding call
                     "model": "azure/gpt-4.1-mini",
-                    "api_key": os.getenv("AZURE_API_KEY"),
+                    "api_key": os.getenv("AZURE_AI_API_KEY"),
                     "api_version": os.getenv("AZURE_API_VERSION"),
-                    "api_base": os.getenv("AZURE_API_BASE"),
+                    "api_base": os.getenv("AZURE_AI_API_BASE"),
                 },
                 "model_info": {"id": "azure-model-id"},
             },
@@ -160,13 +157,11 @@ async def test_provider_budgets_e2e_test_expect_to_fail():
     await asyncio.sleep(2.5)
 
     for _ in range(3):
-        with pytest.raises(Exception) as exc_info:
-            response = await router.acompletion(
+        with pytest.raises(Exception, match="Exceeded budget for provider") as exc_info:
+            await router.acompletion(
                 messages=[{"role": "user", "content": "Hello, how are you?"}],
                 model="anthropic/claude-sonnet-4-5-20250929",
             )
-            print(response)
-            print("response.hidden_params", response._hidden_params)
 
         await asyncio.sleep(0.5)
         # Verify the error is related to budget exceeded
@@ -387,6 +382,10 @@ async def test_sync_in_memory_spend_with_redis():
         provider_budget_config=provider_budget_config,
     )
 
+    # Allow background _init_provider_budget_in_cache tasks to complete
+    # before overwriting Redis values (avoids race where init overwrites with 0.0)
+    await asyncio.sleep(0.5)
+
     # Set some values in Redis
     spend_key_openai = "provider_spend:openai:1d"
     spend_key_anthropic = "provider_spend:anthropic:1d"
@@ -592,18 +591,17 @@ async def test_deployment_budgets_e2e_test_expect_to_fail():
     await asyncio.sleep(2.5)
 
     for _ in range(3):
-        with pytest.raises(Exception) as exc_info:
-            response = await router.acompletion(
+        with pytest.raises(Exception, match="Exceeded budget for deployment") as exc_info:
+            await router.acompletion(
                 messages=[{"role": "user", "content": "Hello, how are you?"}],
                 model="openai/gpt-4o-mini",
             )
-            print(response)
-            print("response.hidden_params", response._hidden_params)
 
         await asyncio.sleep(0.5)
         # Verify the error is related to budget exceeded
 
         assert "Exceeded budget for deployment" in str(exc_info.value)
+
 
 @pytest.mark.flaky(retries=6, delay=2)
 @pytest.mark.asyncio
@@ -645,14 +643,12 @@ async def test_tag_budgets_e2e_test_expect_to_fail():
     await asyncio.sleep(2.5)
 
     for _ in range(3):
-        with pytest.raises(Exception) as exc_info:
-            response = await router.acompletion(
+        with pytest.raises(Exception, match=f"Exceeded budget for tag='{TAG_NAME}'") as exc_info:
+            await router.acompletion(
                 messages=[{"role": "user", "content": "Hello, how are you?"}],
                 model="openai/gpt-4o-mini",
                 metadata={"tags": [TAG_NAME]},
             )
-            print(response)
-            print("response.hidden_params", response._hidden_params)
 
         await asyncio.sleep(0.5)
         # Verify the error is related to budget exceeded

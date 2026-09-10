@@ -23,15 +23,11 @@ These tests align with Databricks Partner Architecture best practices:
 """
 
 import json
-import os
 import sys
 
 import pytest
 from unittest.mock import MagicMock, patch, Mock
 
-sys.path.insert(
-    0, os.path.abspath("../../../..")
-)  # Adds the parent directory to the system path
 
 from litellm.llms.databricks.common_utils import DatabricksBase, DatabricksException
 
@@ -123,9 +119,7 @@ class TestRedactSensitiveData:
     def test_redact_pat_token(self):
         """Databricks PAT tokens are redacted."""
         test_token = "dapiTESTTOKENFAKEVALUEFORTESTINGPURPOSESONLY123"
-        result = DatabricksBase.redact_sensitive_data(
-            f"Using token {test_token}"
-        )
+        result = DatabricksBase.redact_sensitive_data(f"Using token {test_token}")
         assert test_token not in result
         assert "[REDACTED_PAT]" in result
 
@@ -251,6 +245,24 @@ class TestOAuthM2M:
             assert "/serving-endpoints" not in call_url
             assert call_url == "https://adb-123.azuredatabricks.net/oidc/v1/token"
 
+    def test_oauth_m2m_strips_ai_gateway_path(self):
+        """OAuth M2M derives the token URL from the workspace origin."""
+        databricks_base = DatabricksBase()
+
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"access_token": "token"}
+
+        with patch("requests.post", return_value=mock_response) as mock_post:
+            databricks_base._get_oauth_m2m_token(
+                api_base="https://adb-123.azuredatabricks.net/ai-gateway/mlflow/v1",
+                client_id="id",
+                client_secret="secret",
+            )
+
+            call_url = mock_post.call_args[0][0]
+            assert call_url == "https://adb-123.azuredatabricks.net/oidc/v1/token"
+
 
 class TestValidateEnvironmentWithOAuth:
     """Test OAuth M2M is used when credentials are available."""
@@ -355,12 +367,11 @@ class TestSDKPartnerTelemetry:
         mock_sdk_module = MagicMock()
         mock_sdk_module.WorkspaceClient = MagicMock(return_value=mock_workspace_client)
         mock_sdk_module.useragent = mock_useragent
-        
+
         # Mock both databricks and databricks.sdk modules to ensure the import works
-        with patch.dict(sys.modules, {
-            "databricks": MagicMock(),
-            "databricks.sdk": mock_sdk_module
-        }):
+        with patch.dict(
+            sys.modules, {"databricks": MagicMock(), "databricks.sdk": mock_sdk_module}
+        ):
             databricks_base._get_databricks_credentials(
                 api_key=None,
                 api_base=None,
@@ -609,12 +620,11 @@ class TestAuthenticationPriority:
         mock_sdk_module = MagicMock()
         mock_sdk_module.WorkspaceClient = MagicMock(return_value=mock_workspace_client)
         mock_sdk_module.useragent = MagicMock()
-        
+
         # Mock both databricks and databricks.sdk modules to ensure the import works
-        with patch.dict(sys.modules, {
-            "databricks": MagicMock(),
-            "databricks.sdk": mock_sdk_module
-        }):
+        with patch.dict(
+            sys.modules, {"databricks": MagicMock(), "databricks.sdk": mock_sdk_module}
+        ):
             api_base, headers = databricks_base.databricks_validate_environment(
                 api_key=None,
                 api_base=None,

@@ -75,16 +75,18 @@ check_content "Dockerfile" "LITELLM_FORCE_ENTERPRISE=true" "Variable LITELLM_FOR
 check_content "Dockerfile" "init-enterprise.sh" "Referencia al script de init en Dockerfile" || CONTENT_OK=false
 
 # Verificar prod_entrypoint.sh
-check_content "docker/prod_entrypoint.sh" "run_enterprise_init" "Función run_enterprise_init en entrypoint" || CONTENT_OK=false
 check_content "docker/prod_entrypoint.sh" "init-enterprise.sh" "Llamada al script de init en entrypoint" || CONTENT_OK=false
+# NOTA: v1.100.x elimino supervisord del Dockerfile oficial; el entrypoint ya no lo usa.
 
 # Verificar litellm_license.py
-check_content "litellm/proxy/auth/litellm_license.py" "LITELLM_FORCE_ENTERPRISE" "Lógica de FORCE_ENTERPRISE en license.py" || CONTENT_OK=false
-check_content "litellm/proxy/auth/litellm_license.py" "force_enterprise" "Variable force_enterprise en is_premium()" || CONTENT_OK=false
+# Desde v1.100.1 el Enterprise esta hardcodeado con ENTERPRISE_ALWAYS_ON,
+# ya no depende de la variable de entorno LITELLM_FORCE_ENTERPRISE.
+check_content "litellm/proxy/auth/litellm_license.py" "ENTERPRISE_ALWAYS_ON: bool = True" "Flag ENTERPRISE_ALWAYS_ON=True en license.py" || CONTENT_OK=false
+check_content "litellm/proxy/auth/litellm_license.py" "if ENTERPRISE_ALWAYS_ON:" "Early-return de Enterprise en is_premium()" || CONTENT_OK=false
 
 # Verificar script de init
 check_content "docker/init-enterprise.sh" "ENTERPRISE MODE ACTIVADO" "Mensaje de confirmación en init script" || CONTENT_OK=false
-check_content "docker/init-enterprise.sh" "/health/license" "Verificación de endpoint license" || CONTENT_OK=false
+check_content "docker/init-enterprise.sh" "ENTERPRISE_ALWAYS_ON" "Init script valida el flag hardcodeado" || CONTENT_OK=false
 
 # Verificar .env.example
 check_content ".env.example" "LITELLM_FORCE_ENTERPRISE" "Variable FORCE_ENTERPRISE en .env.example" || CONTENT_OK=false

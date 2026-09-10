@@ -1,13 +1,11 @@
 import sys, os
 import pytest
 
-sys.path.insert(
-    0, os.path.abspath("../..")
-)  # Adds the parent directory to the system path
 from litellm import Router
 from litellm.router import Deployment, LiteLLM_Params
 from unittest.mock import patch
 import json
+
 
 @pytest.mark.parametrize("reusable_credentials", [True, False])
 def test_initialize_deployment_for_pass_through_success(reusable_credentials):
@@ -17,9 +15,9 @@ def test_initialize_deployment_for_pass_through_success(reusable_credentials):
     from litellm.litellm_core_utils.credential_accessor import CredentialAccessor
     from litellm.types.utils import CredentialItem
 
-    vertex_project="test-project"
-    vertex_location="us-central1"
-    vertex_credentials=json.dumps({"type": "service_account", "project_id": "test"})
+    vertex_project = "test-project"
+    vertex_location = "us-central1"
+    vertex_credentials = json.dumps({"type": "service_account", "project_id": "test"})
 
     if not reusable_credentials:
         litellm_params = LiteLLM_Params(
@@ -31,17 +29,19 @@ def test_initialize_deployment_for_pass_through_success(reusable_credentials):
         )
     else:
         # add credentials to the credential accessor
-        CredentialAccessor.upsert_credentials([
-            CredentialItem(
-                credential_name="vertex_credentials",
-                credential_values={
-                    "vertex_project": vertex_project,
-                    "vertex_location": vertex_location,
-                    "vertex_credentials": vertex_credentials,
-                },
-                credential_info={}
-            )
-        ])
+        CredentialAccessor.upsert_credentials(
+            [
+                CredentialItem(
+                    credential_name="vertex_credentials",
+                    credential_values={
+                        "vertex_project": vertex_project,
+                        "vertex_location": vertex_location,
+                        "vertex_credentials": vertex_credentials,
+                    },
+                    credential_info={},
+                )
+            ]
+        )
         litellm_params = LiteLLM_Params(
             model="vertex_ai/test-model",
             litellm_credential_name="vertex_credentials",
@@ -57,7 +57,6 @@ def test_initialize_deployment_for_pass_through_success(reusable_credentials):
     router._initialize_deployment_for_pass_through(
         deployment=deployment,
         custom_llm_provider="vertex_ai",
-        model="vertex_ai/test-model",
     )
 
     # Verify the credentials were properly set
@@ -97,7 +96,6 @@ def test_initialize_deployment_for_pass_through_missing_params():
         router._initialize_deployment_for_pass_through(
             deployment=deployment,
             custom_llm_provider="vertex_ai",
-            model="vertex_ai/test-model",
         )
 
 
@@ -117,7 +115,6 @@ def test_initialize_deployment_when_pass_through_disabled():
     router._initialize_deployment_for_pass_through(
         deployment=deployment,
         custom_llm_provider="vertex_ai",
-        model="vertex_ai/test-model",
     )
 
     # If we reach this point, the test passes as the method exited without raising any errors

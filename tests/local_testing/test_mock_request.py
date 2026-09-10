@@ -2,14 +2,10 @@
 #    This tests mock request calls to litellm
 
 import os
-import sys
 import traceback
 
 import pytest
 
-sys.path.insert(
-    0, os.path.abspath("../..")
-)  # Adds the parent directory to the system path
 import litellm
 import time
 
@@ -128,13 +124,12 @@ def test_router_mock_request_with_mock_timeout():
         ],
     )
     with pytest.raises(litellm.Timeout):
-        response = router.completion(
+        router.completion(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": "Hey, I'm a mock request"}],
             timeout=3,
             mock_timeout=True,
         )
-        print(response)
     end_time = time.time()
     assert end_time - start_time >= 3, f"Time taken: {end_time - start_time}"
 
@@ -174,6 +169,4 @@ def test_router_mock_request_with_mock_timeout_with_fallbacks():
     print(response)
     end_time = time.time()
     assert end_time - start_time >= 3, f"Time taken: {end_time - start_time}"
-    assert (
-        "gpt-4.1-nano" in response.model
-    ), "Model should be gpt-4.1-nano"
+    assert "gpt-4.1-nano" in response.model, "Model should be gpt-4.1-nano"

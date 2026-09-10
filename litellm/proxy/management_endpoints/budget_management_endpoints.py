@@ -1,9 +1,9 @@
 """
 BUDGET MANAGEMENT
 
-All /budget management endpoints 
+All /budget management endpoints
 
-/budget/new   
+/budget/new
 /budget/info
 /budget/update
 /budget/delete
@@ -12,16 +12,23 @@ All /budget management endpoints
 """
 
 #### BUDGET TABLE MANAGEMENT ####
-from datetime import timedelta
+import math
+from collections.abc import Mapping
+from typing import Final
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from litellm.litellm_core_utils.duration_parser import duration_in_seconds
 from litellm.proxy._types import *
 from litellm.proxy.auth.user_api_key_auth import user_api_key_auth
+from litellm.proxy.common_utils.timezone_utils import get_budget_reset_time
+from litellm.proxy.management_endpoints.common_utils import (
+    _user_has_admin_view,
+    validate_budget_duration,
+)
 from litellm.proxy.utils import jsonify_object
+from litellm.repositories.budget_repository import BudgetRepository
 
-router = APIRouter()
+router: Final = APIRouter()
 
 
 @router.post(
@@ -47,6 +54,8 @@ async def new_budget(
     - model_max_budget: Optional[dict] - Specify max budget for a given model. Example: {"openai/gpt-4o-mini": {"max_budget": 100.0, "budget_duration": "1d", "tpm_limit": 100000, "rpm_limit": 100000}}
     - budget_reset_at: Optional[datetime] - Datetime when the initial budget is reset. Default is now.
     """
+    from prisma.errors import UniqueViolationError
+
     from litellm.proxy.proxy_server import litellm_proxy_admin_name, prisma_client
 
     if prisma_client is None:
@@ -56,20 +65,18 @@ async def new_budget(
         )
 
     # Validate budget values are not negative
-    if budget_obj.max_budget is not None and budget_obj.max_budget < 0:
+    if budget_obj.max_budget is not None and (not math.isfinite(budget_obj.max_budget) or budget_obj.max_budget < 0):
         raise HTTPException(
             status_code=400,
-            detail={
-                "error": f"max_budget cannot be negative. Received: {budget_obj.max_budget}"
-            },
+            detail={"error": f"max_budget must be a non-negative finite number. Received: {budget_obj.max_budget}"},
         )
-    if budget_obj.soft_budget is not None and budget_obj.soft_budget < 0:
+    if budget_obj.soft_budget is not None and (not math.isfinite(budget_obj.soft_budget) or budget_obj.soft_budget < 0):
         raise HTTPException(
             status_code=400,
-            detail={
-                "error": f"soft_budget cannot be negative. Received: {budget_obj.soft_budget}"
-            },
+            detail={"error": f"soft_budget must be a non-negative finite number. Received: {budget_obj.soft_budget}"},
         )
+
+    validate_budget_duration(budget_obj.budget_duration)
 
     # Validate model_max_budget if present
     if budget_obj.model_max_budget is not None and len(budget_obj.model_max_budget) > 0:
@@ -84,19 +91,25 @@ async def new_budget(
 
     # if no budget_reset_at date is set, but a budget_duration is given, then set budget_reset_at initially to the first completed duration interval in future
     if budget_obj.budget_reset_at is None and budget_obj.budget_duration is not None:
-        budget_obj.budget_reset_at = datetime.utcnow() + timedelta(
-            seconds=duration_in_seconds(duration=budget_obj.budget_duration)
-        )
+        budget_obj.budget_reset_at = get_budget_reset_time(budget_duration=budget_obj.budget_duration)
 
-    budget_obj_json = budget_obj.model_dump(exclude_none=True)
-    budget_obj_jsonified = jsonify_object(budget_obj_json)  # json dump any dictionaries
-    response = await prisma_client.db.litellm_budgettable.create(
-        data={
-            **budget_obj_jsonified,  # type: ignore
-            "created_by": user_api_key_dict.user_id or litellm_proxy_admin_name,
-            "updated_by": user_api_key_dict.user_id or litellm_proxy_admin_name,
-        }  # type: ignore
-    )
+    budget_obj_json: Final = budget_obj.model_dump(exclude_none=True)
+    budget_obj_jsonified: Final[dict[str, object]] = jsonify_object(budget_obj_json)  # mutable-ok: prisma create input
+    try:
+        response: Final = await BudgetRepository(prisma_client).table.create(
+            data={
+                **budget_obj_jsonified,
+                "created_by": user_api_key_dict.user_id or litellm_proxy_admin_name,
+                "updated_by": user_api_key_dict.user_id or litellm_proxy_admin_name,
+            }
+        )
+    except Exception as e:
+        if not isinstance(e, UniqueViolationError):
+            raise
+        raise HTTPException(
+            status_code=400,
+            detail={"error": f"Budget with id '{budget_obj.budget_id}' already exists."},
+        )
 
     return response
 
@@ -135,20 +148,18 @@ async def update_budget(
         raise HTTPException(status_code=400, detail={"error": "budget_id is required"})
 
     # Validate budget values are not negative
-    if budget_obj.max_budget is not None and budget_obj.max_budget < 0:
+    if budget_obj.max_budget is not None and (not math.isfinite(budget_obj.max_budget) or budget_obj.max_budget < 0):
         raise HTTPException(
             status_code=400,
-            detail={
-                "error": f"max_budget cannot be negative. Received: {budget_obj.max_budget}"
-            },
+            detail={"error": f"max_budget must be a non-negative finite number. Received: {budget_obj.max_budget}"},
         )
-    if budget_obj.soft_budget is not None and budget_obj.soft_budget < 0:
+    if budget_obj.soft_budget is not None and (not math.isfinite(budget_obj.soft_budget) or budget_obj.soft_budget < 0):
         raise HTTPException(
             status_code=400,
-            detail={
-                "error": f"soft_budget cannot be negative. Received: {budget_obj.soft_budget}"
-            },
+            detail={"error": f"soft_budget must be a non-negative finite number. Received: {budget_obj.soft_budget}"},
         )
+
+    validate_budget_duration(budget_obj.budget_duration)
 
     # Validate model_max_budget if present in update
     if budget_obj.model_max_budget is not None and len(budget_obj.model_max_budget) > 0:
@@ -161,12 +172,24 @@ async def update_budget(
         except ValueError as e:
             raise HTTPException(status_code=400, detail={"error": str(e)})
 
-    response = await prisma_client.db.litellm_budgettable.update(
-        where={"budget_id": budget_obj.budget_id},
-        data={
-            **budget_obj.model_dump(exclude_unset=True),  # type: ignore
+    # recompute budget_reset_at when the duration changes, unless the caller pinned a reset time explicitly
+    recomputed_reset_at: Final = (
+        {"budget_reset_at": get_budget_reset_time(budget_duration=budget_obj.budget_duration)}
+        if budget_obj.budget_duration is not None and "budget_reset_at" not in budget_obj.model_fields_set
+        else {}
+    )
+
+    budget_obj_jsonified: Final[Mapping[str, object]] = jsonify_object(
+        {
+            **budget_obj.model_dump(exclude_unset=True),
+            **recomputed_reset_at,
             "updated_by": user_api_key_dict.user_id or litellm_proxy_admin_name,
-        },  # type: ignore
+        }
+    )
+
+    response: Final = await BudgetRepository(prisma_client).table.update(
+        where={"budget_id": budget_obj.budget_id},
+        data=budget_obj_jsonified,
     )
 
     return response
@@ -192,11 +215,9 @@ async def info_budget(data: BudgetRequest):
     if len(data.budgets) == 0:
         raise HTTPException(
             status_code=400,
-            detail={
-                "error": f"Specify list of budget id's to query. Passed in={data.budgets}"
-            },
+            detail={"error": f"Specify list of budget id's to query. Passed in={data.budgets}"},
         )
-    response = await prisma_client.db.litellm_budgettable.find_many(
+    response: Final = await BudgetRepository(prisma_client).table.find_many(
         where={"budget_id": {"in": data.budgets}},
     )
 
@@ -228,28 +249,21 @@ async def budget_settings(
             detail={"error": CommonProxyErrors.db_not_connected_error.value},
         )
 
-    if user_api_key_dict.user_role != LitellmUserRoles.PROXY_ADMIN:
+    if not _user_has_admin_view(user_api_key_dict):
         raise HTTPException(
             status_code=400,
-            detail={
-                "error": "{}, your role={}".format(
-                    CommonProxyErrors.not_allowed_access.value,
-                    user_api_key_dict.user_role,
-                )
-            },
+            detail={"error": f"{CommonProxyErrors.not_allowed_access.value}, your role={user_api_key_dict.user_role}"},
         )
 
     ## get budget item from db
-    db_budget_row = await prisma_client.db.litellm_budgettable.find_first(
-        where={"budget_id": budget_id}
-    )
+    db_budget_row: Final = await BudgetRepository(prisma_client).table.find_first(where={"budget_id": budget_id})
 
     if db_budget_row is not None:
         db_budget_row_dict = db_budget_row.model_dump(exclude_none=True)
     else:
         db_budget_row_dict = {}
 
-    allowed_args = {
+    allowed_args: Final = {
         "max_parallel_requests": {"type": "Integer"},
         "tpm_limit": {"type": "Integer"},
         "rpm_limit": {"type": "Integer"},
@@ -259,7 +273,7 @@ async def budget_settings(
         "model_max_budget": {"type": "Object"},
     }
 
-    return_val = []
+    return_val: Final = []
 
     for field_name, field_info in BudgetNewRequest.model_fields.items():
         if field_name in allowed_args:
@@ -295,18 +309,13 @@ async def list_budget(
             detail={"error": CommonProxyErrors.db_not_connected_error.value},
         )
 
-    if user_api_key_dict.user_role != LitellmUserRoles.PROXY_ADMIN:
+    if not _user_has_admin_view(user_api_key_dict):
         raise HTTPException(
             status_code=400,
-            detail={
-                "error": "{}, your role={}".format(
-                    CommonProxyErrors.not_allowed_access.value,
-                    user_api_key_dict.user_role,
-                )
-            },
+            detail={"error": f"{CommonProxyErrors.not_allowed_access.value}, your role={user_api_key_dict.user_role}"},
         )
 
-    response = await prisma_client.db.litellm_budgettable.find_many()
+    response: Final = await BudgetRepository(prisma_client).table.find_many()
 
     return response
 
@@ -337,16 +346,9 @@ async def delete_budget(
     if user_api_key_dict.user_role != LitellmUserRoles.PROXY_ADMIN:
         raise HTTPException(
             status_code=400,
-            detail={
-                "error": "{}, your role={}".format(
-                    CommonProxyErrors.not_allowed_access.value,
-                    user_api_key_dict.user_role,
-                )
-            },
+            detail={"error": f"{CommonProxyErrors.not_allowed_access.value}, your role={user_api_key_dict.user_role}"},
         )
 
-    response = await prisma_client.db.litellm_budgettable.delete(
-        where={"budget_id": data.id}
-    )
+    response: Final = await BudgetRepository(prisma_client).table.delete(where={"budget_id": data.id})
 
     return response

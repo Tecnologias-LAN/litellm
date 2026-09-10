@@ -2,16 +2,12 @@
 #    This tests caching on the router
 import asyncio
 import os
-import sys
 import time
 import traceback
 from unittest.mock import patch
 from typing import Union
 import pytest
 
-sys.path.insert(
-    0, os.path.abspath("../..")
-)  # Adds the parent directory to the system path
 import litellm
 from litellm import Router
 from litellm.caching import RedisCache, RedisClusterCache
@@ -268,8 +264,8 @@ async def test_acompletion_caching_on_router_caching_groups():
                 "model_name": "azure-gpt-3.5-turbo",
                 "litellm_params": {
                     "model": "azure/gpt-4.1-mini",
-                    "api_key": os.getenv("AZURE_API_KEY"),
-                    "api_base": os.getenv("AZURE_API_BASE"),
+                    "api_key": os.getenv("AZURE_AI_API_KEY"),
+                    "api_base": os.getenv("AZURE_AI_API_BASE"),
                     "api_version": os.getenv("AZURE_API_VERSION"),
                 },
                 "tpm": 100000,

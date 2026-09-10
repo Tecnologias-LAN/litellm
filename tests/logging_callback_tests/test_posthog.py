@@ -1,7 +1,5 @@
 import os
-import sys
 
-sys.path.insert(0, os.path.abspath("../.."))
 
 import pytest
 
@@ -33,7 +31,7 @@ def create_standard_logging_payload() -> StandardLoggingPayload:
             "endTime": 1234567891.0,
             "completionStartTime": 1234567890.5,
             "response_time": 1.0,
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-5-mini",
             "model_id": "model-123",
             "api_base": "https://api.openai.com",
             "cache_hit": False,
@@ -57,7 +55,7 @@ async def test_create_posthog_event_payload():
     event_payload = posthog_logger.create_posthog_event_payload(kwargs)
 
     assert event_payload["event"] == "$ai_generation"
-    assert event_payload["properties"]["$ai_model"] == "gpt-3.5-turbo"
+    assert event_payload["properties"]["$ai_model"] == "gpt-5-mini"
     assert event_payload["properties"]["$ai_input_tokens"] == 20
     assert event_payload["properties"]["$ai_output_tokens"] == 10
 
@@ -251,7 +249,7 @@ async def test_custom_metadata_with_no_metadata():
 
     # Should not error and should have standard properties
     assert event_payload["event"] == "$ai_generation"
-    assert event_payload["properties"]["$ai_model"] == "gpt-3.5-turbo"
+    assert event_payload["properties"]["$ai_model"] == "gpt-5-mini"
 
     # Test with empty metadata
     kwargs = {
@@ -262,7 +260,7 @@ async def test_custom_metadata_with_no_metadata():
 
     # Should not error and should have standard properties
     assert event_payload["event"] == "$ai_generation"
-    assert event_payload["properties"]["$ai_model"] == "gpt-3.5-turbo"
+    assert event_payload["properties"]["$ai_model"] == "gpt-5-mini"
 
 
 @pytest.mark.asyncio
@@ -320,13 +318,15 @@ def test_async_callback_atexit_handler_exists():
     from litellm.litellm_core_utils.logging_worker import GLOBAL_LOGGING_WORKER
 
     # Verify GLOBAL_LOGGING_WORKER has _flush_on_exit method
-    assert hasattr(GLOBAL_LOGGING_WORKER, '_flush_on_exit'), \
-        "GLOBAL_LOGGING_WORKER should have _flush_on_exit method"
+    assert hasattr(
+        GLOBAL_LOGGING_WORKER, "_flush_on_exit"
+    ), "GLOBAL_LOGGING_WORKER should have _flush_on_exit method"
 
     # Verify PostHogLogger has _flush_on_exit method
     posthog_logger = PostHogLogger()
-    assert hasattr(posthog_logger, '_flush_on_exit'), \
-        "PostHogLogger should have _flush_on_exit method"
+    assert hasattr(
+        posthog_logger, "_flush_on_exit"
+    ), "PostHogLogger should have _flush_on_exit method"
 
     # Verify method can be called without crashing (with empty queue)
     # This tests the early return paths
@@ -354,16 +354,18 @@ async def test_posthog_atexit_flushes_internal_queue():
     kwargs = {"standard_logging_object": standard_payload}
     event_payload = posthog_logger.create_posthog_event_payload(kwargs)
 
-    posthog_logger.log_queue.append({
-        "event": event_payload,
-        "api_key": "test_key",
-        "api_url": "https://app.posthog.com"
-    })
+    posthog_logger.log_queue.append(
+        {
+            "event": event_payload,
+            "api_key": "test_key",
+            "api_url": "https://app.posthog.com",
+        }
+    )
 
     assert len(posthog_logger.log_queue) == 1, "Queue should have 1 event"
 
     # Mock the sync HTTP client to avoid real API calls
-    with patch.object(posthog_logger.sync_client, 'post') as mock_post:
+    with patch.object(posthog_logger.sync_client, "post") as mock_post:
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.raise_for_status = Mock()
@@ -378,7 +380,7 @@ async def test_posthog_atexit_flushes_internal_queue():
 
         # Verify correct endpoint was called
         call_args = mock_post.call_args
-        assert "/batch/" in call_args.kwargs['url'], "Should POST to /batch/ endpoint"
+        assert "/batch/" in call_args.kwargs["url"], "Should POST to /batch/ endpoint"
 
 
 @pytest.mark.asyncio
@@ -398,6 +400,7 @@ async def test_safe_dumps_serialization_in_sync_log():
 
     class FakeNonSerializable(BaseModel):
         """Stand-in for UserAPIKeyAuth or any Pydantic object in metadata."""
+
         token: str = "sk-secret"
 
     posthog_logger = PostHogLogger()
@@ -456,11 +459,13 @@ async def test_safe_dumps_serialization_in_async_send_batch():
     }
     event_payload = posthog_logger.create_posthog_event_payload(kwargs)
 
-    posthog_logger.log_queue.append({
-        "event": event_payload,
-        "api_key": "test_key",
-        "api_url": "https://app.posthog.com",
-    })
+    posthog_logger.log_queue.append(
+        {
+            "event": event_payload,
+            "api_key": "test_key",
+            "api_url": "https://app.posthog.com",
+        }
+    )
 
     with patch.object(posthog_logger.async_client, "post") as mock_post:
         mock_response = Mock()
@@ -502,11 +507,13 @@ async def test_safe_dumps_serialization_in_flush_on_exit():
     }
     event_payload = posthog_logger.create_posthog_event_payload(kwargs)
 
-    posthog_logger.log_queue.append({
-        "event": event_payload,
-        "api_key": "test_key",
-        "api_url": "https://app.posthog.com",
-    })
+    posthog_logger.log_queue.append(
+        {
+            "event": event_payload,
+            "api_key": "test_key",
+            "api_url": "https://app.posthog.com",
+        }
+    )
 
     with patch.object(posthog_logger.sync_client, "post") as mock_post:
         mock_response = Mock()
@@ -542,8 +549,8 @@ async def test_sync_callback_not_affected_by_atexit():
         nonlocal callback_invoked_immediately
         callback_invoked_immediately = True
 
-    with patch.object(PostHogLogger, 'log_success_event', mock_log_success):
-        with patch('httpx.Client.post') as mock_post:
+    with patch.object(PostHogLogger, "log_success_event", mock_log_success):
+        with patch("httpx.Client.post") as mock_post:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.raise_for_status = Mock()
@@ -557,4 +564,6 @@ async def test_sync_callback_not_affected_by_atexit():
             posthog_logger.log_success_event(kwargs, None, 0.0, 0.0)
 
             # Callback should be invoked immediately, not queued for atexit
-            assert callback_invoked_immediately, "Sync callback should be invoked immediately"
+            assert (
+                callback_invoked_immediately
+            ), "Sync callback should be invoked immediately"

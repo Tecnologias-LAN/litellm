@@ -1,57 +1,47 @@
-import { modelCreateCall, Model } from "../networking";
-import NotificationManager from "../molecules/notifications_manager";
+import { modelCreateCall } from "../networking";
+import { toast } from "@/lib/toast";
+import type { ComplexityRouterConfigPayload } from "./build_complexity_router_config";
 
-export const handleAddAutoRouterSubmit = async (values: any, accessToken: string, form: any, callback?: () => void) => {
+export interface AddAutoRouterValues {
+  auto_router_name: string;
+  auto_router_default_model: string | undefined;
+  model_type: "complexity_router";
+  complexity_router_config: ComplexityRouterConfigPayload;
+  team_id?: string;
+  model_access_group?: string[];
+}
+
+export const handleAddAutoRouterSubmit = async (
+  values: AddAutoRouterValues,
+  accessToken: string,
+  resetForm: () => void,
+  callback?: () => void,
+) => {
   try {
-    console.log("=== AUTO ROUTER SUBMIT HANDLER CALLED ===");
-    console.log("handling auto router submit for formValues:", values);
-    console.log("Access token:", accessToken ? "Present" : "Missing");
-    console.log("Form:", form ? "Present" : "Missing");
-    console.log("Callback:", callback ? "Present" : "Missing");
-
-    // Create auto router configuration
-    const autoRouterConfig: any = {
+    const autoRouterConfig = {
       model_name: values.auto_router_name,
       litellm_params: {
-        model: `auto_router/${values.auto_router_name}`,
-        auto_router_config: JSON.stringify(values.auto_router_config), // Convert JSON object to string as expected by backend
-        auto_router_default_model: values.auto_router_default_model,
+        model: "auto_router/complexity_router",
+        complexity_router_config: values.complexity_router_config,
+        complexity_router_default_model: values.auto_router_default_model,
       },
-      model_info: {},
+      model_info: {
+        ...(values.team_id ? { team_id: values.team_id } : {}),
+        ...(values.model_access_group?.length ? { access_groups: values.model_access_group } : {}),
+      },
     };
 
-    // Add optional embedding model if provided
-    if (values.auto_router_embedding_model && values.auto_router_embedding_model !== "custom") {
-      autoRouterConfig.litellm_params.auto_router_embedding_model = values.auto_router_embedding_model;
-    } else if (values.custom_embedding_model) {
-      autoRouterConfig.litellm_params.auto_router_embedding_model = values.custom_embedding_model;
+    await modelCreateCall(accessToken, autoRouterConfig);
+
+    toast.success(`Successfully created Auto Router: ${values.auto_router_name}`);
+
+    resetForm();
+
+    if (callback) {
+      callback();
     }
-
-    // Add team information if provided
-    if (values.team_id) {
-      autoRouterConfig.model_info.team_id = values.team_id;
-    }
-
-    // Add model access groups if provided
-    if (values.model_access_group && values.model_access_group.length > 0) {
-      autoRouterConfig.model_info.access_groups = values.model_access_group;
-    }
-
-    console.log("Auto router configuration to be created:", autoRouterConfig);
-    console.log("Auto router config (stringified):", autoRouterConfig.litellm_params.auto_router_config);
-
-    // Create the auto router using the same model creation endpoint
-    console.log("Calling modelCreateCall with:", {
-      accessToken: accessToken ? "Present" : "Missing",
-      config: autoRouterConfig,
-    });
-    const response: any = await modelCreateCall(accessToken, autoRouterConfig as Model);
-    console.log(`response for auto router create call:`, response);
-
-    // Reset the form
-    form.resetFields();
   } catch (error) {
     console.error("Failed to add auto router:", error);
-    NotificationManager.fromBackend("Failed to add auto router: " + error);
+    toast.fromError("Failed to add auto router: " + error);
   }
 };

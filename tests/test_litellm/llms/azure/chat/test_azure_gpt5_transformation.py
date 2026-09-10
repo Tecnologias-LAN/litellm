@@ -1,12 +1,22 @@
 import pytest
 
 import litellm
+from litellm.litellm_core_utils.get_model_cost_map import get_model_cost_map
 from litellm.llms.azure.chat.gpt_5_transformation import AzureOpenAIGPT5Config
 
 
 @pytest.fixture()
 def config() -> AzureOpenAIGPT5Config:
     return AzureOpenAIGPT5Config()
+
+
+@pytest.fixture(autouse=True)
+def use_local_model_cost_map(monkeypatch: pytest.MonkeyPatch):
+    """Pin the bundled cost map: these gates read model-map capability keys, and the default
+    import path fetches the published map, which lags a key added in this repo."""
+    monkeypatch.setenv("LITELLM_LOCAL_MODEL_COST_MAP", "True")
+    monkeypatch.setattr(litellm, "model_cost", get_model_cost_map(url=litellm.model_cost_map_url))
+    litellm.add_known_models(model_cost_map=litellm.model_cost)
 
 
 def test_azure_gpt5_supports_reasoning_effort(config: AzureOpenAIGPT5Config):
@@ -114,7 +124,9 @@ def test_azure_gpt5_codex_series_transform_request(config: AzureOpenAIGPT5Config
 
 
 # GPT-5.1 temperature handling tests for Azure
-def test_azure_gpt5_1_temperature_with_reasoning_effort_none(config: AzureOpenAIGPT5Config):
+def test_azure_gpt5_1_temperature_with_reasoning_effort_none(
+    config: AzureOpenAIGPT5Config,
+):
     """Test that Azure GPT-5.1 supports any temperature when reasoning_effort='none'.
 
     Azure OpenAI supports reasoning_effort='none' for gpt-5.1 models.
@@ -144,7 +156,9 @@ def test_azure_gpt5_1_reasoning_effort_none_supported(config: AzureOpenAIGPT5Con
     assert params.get("reasoning_effort") == "none"
 
 
-def test_azure_gpt5_1_temperature_without_reasoning_effort(config: AzureOpenAIGPT5Config):
+def test_azure_gpt5_1_temperature_without_reasoning_effort(
+    config: AzureOpenAIGPT5Config,
+):
     """Test that Azure GPT-5.1 supports any temperature when reasoning_effort is not specified."""
     params = config.map_openai_params(
         non_default_params={"temperature": 0.7},
@@ -156,7 +170,9 @@ def test_azure_gpt5_1_temperature_without_reasoning_effort(config: AzureOpenAIGP
     assert params["temperature"] == 0.7
 
 
-def test_azure_gpt5_1_temperature_with_reasoning_effort_other_values(config: AzureOpenAIGPT5Config):
+def test_azure_gpt5_1_temperature_with_reasoning_effort_other_values(
+    config: AzureOpenAIGPT5Config,
+):
     """Test that Azure GPT-5.1 only allows temperature=1 when reasoning_effort is not 'none'."""
     # Test that temperature != 1 raises error when reasoning_effort is set to other values
     with pytest.raises(litellm.utils.UnsupportedParamsError):
@@ -167,7 +183,7 @@ def test_azure_gpt5_1_temperature_with_reasoning_effort_other_values(config: Azu
             drop_params=False,
             api_version="2024-05-01-preview",
         )
-    
+
     # Test that temperature=1 is allowed with other reasoning_effort values
     params = config.map_openai_params(
         non_default_params={"temperature": 1.0, "reasoning_effort": "medium"},
@@ -190,6 +206,26 @@ def test_azure_gpt5_1_series_temperature_handling(config: AzureOpenAIGPT5Config)
         api_version="2024-05-01-preview",
     )
     assert params["temperature"] == 0.6
+
+
+def test_azure_gpt5_4_preserves_reasoning_effort_when_tools_present(
+    config: AzureOpenAIGPT5Config,
+):
+    """Azure GPT-5.4+ no longer drops reasoning_effort when tools are present.
+
+    Both OpenAI and Azure now route tools+reasoning to the Responses API bridge,
+    so reasoning_effort must be preserved in map_openai_params.
+    """
+    tools = [{"type": "function", "function": {"name": "test", "description": "test"}}]
+    params = config.map_openai_params(
+        non_default_params={"reasoning_effort": "high", "tools": tools},
+        optional_params={},
+        model="gpt5_series/gpt-5.4",
+        drop_params=False,
+        api_version="2024-05-01-preview",
+    )
+    assert params.get("reasoning_effort") == "high"
+    assert params["tools"] == tools
 
 
 def test_azure_gpt5_reasoning_effort_none_error(config: AzureOpenAIGPT5Config):
@@ -274,3 +310,29 @@ def test_azure_gpt5_1_does_not_support_logprobs(config: AzureOpenAIGPT5Config):
     assert "logprobs" not in supported_params
     assert "top_logprobs" not in supported_params
 
+
+class TestAzureResolvesTheDeclaredDefaultEffort:
+    """Azure reaches the same models under names that are not cost-map keys. Every capability
+    lookup therefore has to normalise the name identically, which is why the normalisation is
+    one overridden resolver rather than a rewrite inside a single lookup.
+    """
+
+    @pytest.mark.parametrize(
+        "model, temperature_survives",
+        [
+            ("azure/gpt-5.1", True),
+            ("gpt5_series/gpt-5.1", True),
+            ("gpt-5.1", True),
+            ("azure/gpt-5.6-terra", False),
+            ("gpt5_series/gpt-5.6-terra", False),
+            ("azure/gpt-5.5", False),
+        ],
+    )
+    def test_every_azure_name_shape_reads_the_same_entry(self, config, model, temperature_survives):
+        mapped = config.map_openai_params(
+            non_default_params={"temperature": 0},
+            optional_params={},
+            model=model,
+            drop_params=True,
+        )
+        assert ("temperature" in mapped) is temperature_survives

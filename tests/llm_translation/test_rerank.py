@@ -1,21 +1,15 @@
 import asyncio
 import json
 import os
-import sys
 import traceback
 
 from dotenv import load_dotenv
 
 load_dotenv()
 import io
-import os
 from typing import Optional, Dict
 
-sys.path.insert(
-    0, os.path.abspath("../..")
-)  # Adds the parent directory to the system path
 
-import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -146,48 +140,6 @@ async def test_basic_rerank_together_ai(sync_mode):
         if "Service unavailable" in str(e):
             pytest.skip("Skipping test due to 503 Service Temporarily Unavailable")
         raise e
-
-
-@pytest.mark.asyncio()
-@pytest.mark.parametrize("sync_mode", [True, False])
-@pytest.mark.skip(reason="Skipping test due to Cohere RBAC issues")
-async def test_basic_rerank_azure_ai(sync_mode):
-    import os
-
-    litellm.set_verbose = True
-
-    if sync_mode is True:
-        response = litellm.rerank(
-            model="azure_ai/Cohere-rerank-v3-multilingual-ko",
-            query="hello",
-            documents=["hello", "world"],
-            top_n=3,
-            api_key=os.getenv("AZURE_AI_COHERE_API_KEY"),
-            api_base=os.getenv("AZURE_AI_COHERE_API_BASE"),
-        )
-
-        print("re rank response: ", response)
-
-        assert response.id is not None
-        assert response.results is not None
-
-        assert_response_shape(response, custom_llm_provider="together_ai")
-    else:
-        response = await litellm.arerank(
-            model="azure_ai/Cohere-rerank-v3-multilingual-ko",
-            query="hello",
-            documents=["hello", "world"],
-            top_n=3,
-            api_key=os.getenv("AZURE_AI_COHERE_API_KEY"),
-            api_base=os.getenv("AZURE_AI_COHERE_API_BASE"),
-        )
-
-        print("async re rank response: ", response)
-
-        assert response.id is not None
-        assert response.results is not None
-
-        assert_response_shape(response, custom_llm_provider="together_ai")
 
 
 @pytest.mark.asyncio()

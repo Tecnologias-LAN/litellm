@@ -1,16 +1,11 @@
 import json
-import os
-import sys
 from datetime import datetime
 from unittest.mock import AsyncMock
 import pytest
 import httpx
 from respx import MockRouter
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, MagicMock
 
-sys.path.insert(
-    0, os.path.abspath("../..")
-)  # Adds the parent directory to the system path
 
 import litellm
 from litellm.types.utils import TextCompletionResponse
@@ -77,7 +72,9 @@ def test_convert_dict_to_text_completion_response():
 async def test_huggingface_text_completion_logprobs():
     """Test text completion with Hugging Face, focusing on logprobs structure"""
     litellm.set_verbose = True
-    litellm.disable_aiohttp_transport = True # since this uses respx, we need to set use_aiohttp_transport to False
+    litellm.disable_aiohttp_transport = (
+        True  # since this uses respx, we need to set use_aiohttp_transport to False
+    )
     from litellm.llms.custom_httpx.http_handler import HTTPHandler, AsyncHTTPHandler
 
     mock_response = [

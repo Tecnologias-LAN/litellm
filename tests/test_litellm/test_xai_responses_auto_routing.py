@@ -1,11 +1,9 @@
 """
 Test automatic routing to xAI Responses API when tools are present
 """
-import os
-import sys
+
 from unittest.mock import MagicMock, patch
 
-sys.path.insert(0, os.path.abspath("../.."))
 
 import pytest
 import litellm
@@ -44,11 +42,9 @@ class TestXAIResponsesAutoRouting:
                     "description": "Get the weather",
                     "parameters": {
                         "type": "object",
-                        "properties": {
-                            "location": {"type": "string"}
-                        }
-                    }
-                }
+                        "properties": {"location": {"type": "string"}},
+                    },
+                },
             }
         ]
         web_search_options = None
@@ -90,7 +86,7 @@ class TestXAIResponsesAutoRouting:
                 "function": {
                     "name": "get_weather",
                     "description": "Get the weather",
-                }
+                },
             }
         ]
         web_search_options = None
@@ -143,12 +139,7 @@ class TestXAIResponsesAutoRouting:
         model = "grok-4"
         custom_llm_provider = "xai"
         tools = [
-            {
-                "type": "web_search",
-                "filters": {
-                    "allowed_domains": ["wikipedia.org"]
-                }
-            }
+            {"type": "web_search", "filters": {"allowed_domains": ["wikipedia.org"]}}
         ]
         web_search_options = None
 
@@ -166,12 +157,7 @@ class TestXAIResponsesAutoRouting:
         """Test auto-routing with x_search tool"""
         model = "grok-4"
         custom_llm_provider = "xai"
-        tools = [
-            {
-                "type": "x_search",
-                "allowed_x_handles": ["@elonmusk"]
-            }
-        ]
+        tools = [{"type": "x_search", "allowed_x_handles": ["@elonmusk"]}]
         web_search_options = None
 
         model_info, updated_model = responses_api_bridge_check(
@@ -236,11 +222,9 @@ class TestXAIResponsesAutoRouting:
                     "description": "Get weather info",
                     "parameters": {
                         "type": "object",
-                        "properties": {
-                            "location": {"type": "string"}
-                        }
-                    }
-                }
+                        "properties": {"location": {"type": "string"}},
+                    },
+                },
             }
         ]
 
@@ -249,7 +233,7 @@ class TestXAIResponsesAutoRouting:
                 model=model,
                 messages=messages,
                 tools=tools,
-                mock_response="This is a test"  # Use mock mode to avoid API calls
+                mock_response="This is a test",  # Use mock mode to avoid API calls
             )
         except Exception:
             # It's ok if this fails, we just want to verify the routing logic

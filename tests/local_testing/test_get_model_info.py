@@ -1,17 +1,12 @@
 # What is this?
 ## Unit testing for the 'get_model_info()' function
 import os
-import sys
 import traceback
 import json
 
 
-
 from typing import List, Dict, Any
 
-sys.path.insert(
-    0, os.path.abspath("../..")
-)  # Adds the parent directory to the system-path
 import pytest
 
 import litellm
@@ -55,7 +50,7 @@ def test_get_model_info_custom_llm_with_same_name_vllm(monkeypatch):
 
 
 def test_get_model_info_shows_correct_supports_vision():
-    info = litellm.get_model_info("gemini/gemini-1.5-flash")
+    info = litellm.get_model_info("gemini/gemini-2.0-flash")
     print("info", info)
     assert info["supports_vision"] is True
 
@@ -83,9 +78,9 @@ def test_get_model_info_finetuned_models():
 
 
 def test_get_model_info_gemini_pro():
-    info = litellm.get_model_info("gemini-1.5-pro-002")
+    info = litellm.get_model_info("gemini-2.0-flash")
     print("info", info)
-    assert info["key"] == "gemini-1.5-pro-002"
+    assert info["key"] == "gemini-2.0-flash"
 
 
 def test_get_model_info_ollama_chat():
@@ -115,20 +110,18 @@ def test_get_model_info_ollama_chat():
         assert mock_client.call_args.kwargs["json"]["name"] == "unknown-model"
 
 
-
-
 def test_get_model_info_bedrock_region():
     os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
     litellm.model_cost = litellm.get_model_cost_map(url="")
     args = {
-        "model": "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+        "model": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
         "custom_llm_provider": "bedrock",
     }
-    litellm.model_cost.pop("us.anthropic.claude-3-5-sonnet-20241022-v2:0", None)
+    litellm.model_cost.pop("us.anthropic.claude-haiku-4-5-20251001-v1:0", None)
     info = litellm.get_model_info(**args)
     print("info", info)
-    assert info["key"] == "anthropic.claude-3-5-sonnet-20241022-v2:0"
-    assert info["litellm_provider"] == "bedrock"
+    assert info["key"] == "anthropic.claude-haiku-4-5-20251001-v1:0"
+    assert info["litellm_provider"] == "bedrock_converse"
 
 
 @pytest.mark.parametrize(
@@ -137,7 +130,6 @@ def test_get_model_info_bedrock_region():
         "ft:gpt-3.5-turbo:my-org:custom_suffix:id",
         "ft:gpt-4-0613:my-org:custom_suffix:id",
         "ft:davinci-002:my-org:custom_suffix:id",
-        "ft:gpt-4-0613:my-org:custom_suffix:id",
         "ft:babbage-002:my-org:custom_suffix:id",
         "gpt-35-turbo",
         "ada",
@@ -156,7 +148,6 @@ def test_get_model_info_ft_model_with_provider_prefix():
     info = litellm.get_model_info(**args)
     print("info", info)
     assert info["key"] == "ft:gpt-3.5-turbo"
-
 
 
 def _enforce_bedrock_converse_models(
@@ -281,7 +272,7 @@ def test_get_model_info_custom_model_router():
                 },
                 "model_info": {
                     "id": "c20d603e-1166-4e0f-aa65-ed9c476ad4ca",
-                }
+                },
             }
         ]
     )
@@ -330,6 +321,38 @@ def test_get_model_info_bedrock_models():
                     assert (
                         v[base_model_key] == base_model_value
                     ), f"{base_model_key} is not equal to {base_model_value} for model {k}"
+
+
+def test_get_model_info_bedrock_cross_region_capability_parity():
+    """
+    Cross-region inference profiles carry litellm_provider "bedrock_converse", so the
+    regional drift check above (which filters on "bedrock") never reaches them.
+    """
+    os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
+    litellm.model_cost = litellm.get_model_cost_map(url="")
+
+    prefixes = ("us.", "eu.", "apac.", "us-gov.")
+    checked = 0
+
+    for k, v in litellm.model_cost.items():
+        if not str(v.get("litellm_provider", "")).startswith("bedrock"):
+            continue
+        base_model_key = next(
+            (k[len(p) :] for p in prefixes if k.startswith(p)),
+            None,
+        )
+        if base_model_key is None or base_model_key not in litellm.model_cost:
+            continue
+        checked += 1
+        for cap, base_value in litellm.model_cost[base_model_key].items():
+            if not cap.startswith("supports_"):
+                continue
+            assert cap in v, f"{cap} is on {base_model_key} but missing from {k}"
+            assert (
+                v[cap] == base_value
+            ), f"{cap} is {v[cap]} on {k} but {base_value} on {base_model_key}"
+
+    assert checked > 0, "no cross-region bedrock profiles found - the filter is inert"
 
 
 def test_get_model_info_huggingface_models(monkeypatch):

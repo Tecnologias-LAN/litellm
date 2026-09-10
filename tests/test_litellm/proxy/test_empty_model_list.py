@@ -5,24 +5,31 @@ These tests verify that /v2/model/info and /model_group/info endpoints
 return empty data arrays instead of 500 errors when no models are configured.
 """
 
-import os
-import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-sys.path.insert(
-    0, os.path.abspath("../../..")
-)  # Adds the parent directory to the system-path
 
+from litellm.proxy._types import LitellmUserRoles, UserAPIKeyAuth
 from litellm.proxy.proxy_server import app
+import litellm.proxy.proxy_server as ps
 
 
 @pytest.fixture
 def client():
     """Create a test client for the FastAPI app."""
     return TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def mock_auth():
+    """Override auth dependency for all tests."""
+    app.dependency_overrides[ps.user_api_key_auth] = lambda: UserAPIKeyAuth(
+        user_role=LitellmUserRoles.PROXY_ADMIN, user_id="test-user"
+    )
+    yield
+    app.dependency_overrides.pop(ps.user_api_key_auth, None)
 
 
 class TestEmptyModelListHandling:
@@ -40,20 +47,10 @@ class TestEmptyModelListHandling:
         monkeypatch.setattr("litellm.proxy.proxy_server.user_model", None)
         monkeypatch.setattr("litellm.proxy.proxy_server.general_settings", {})
 
-        with patch(
-            "litellm.proxy.auth.user_api_key_auth.user_api_key_auth",
-            return_value=MagicMock(
-                user_id="test-user",
-                team_id=None,
-                team_models=[],
-                models=[],
-                user_role="proxy_admin",
-            ),
-        ):
-            response = client.get(
-                "/v2/model/info",
-                headers={"Authorization": "Bearer sk-test"},
-            )
+        response = client.get(
+            "/v2/model/info",
+            headers={"Authorization": "Bearer sk-test"},
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -78,20 +75,10 @@ class TestEmptyModelListHandling:
         monkeypatch.setattr("litellm.proxy.proxy_server.user_model", None)
         monkeypatch.setattr("litellm.proxy.proxy_server.general_settings", {})
 
-        with patch(
-            "litellm.proxy.auth.user_api_key_auth.user_api_key_auth",
-            return_value=MagicMock(
-                user_id="test-user",
-                team_id=None,
-                team_models=[],
-                models=[],
-                user_role="proxy_admin",
-            ),
-        ):
-            response = client.get(
-                "/v2/model/info",
-                headers={"Authorization": "Bearer sk-test"},
-            )
+        response = client.get(
+            "/v2/model/info",
+            headers={"Authorization": "Bearer sk-test"},
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -101,9 +88,7 @@ class TestEmptyModelListHandling:
         assert data["total_pages"] == 0
         assert data["size"] == 50  # default page size
 
-    def test_v2_model_info_pagination_with_empty_results(
-        self, client, monkeypatch
-    ):
+    def test_v2_model_info_pagination_with_empty_results(self, client, monkeypatch):
         """
         Test that /v2/model/info pagination parameters work correctly
         when there are no models (empty results).
@@ -116,22 +101,12 @@ class TestEmptyModelListHandling:
         monkeypatch.setattr("litellm.proxy.proxy_server.user_model", None)
         monkeypatch.setattr("litellm.proxy.proxy_server.general_settings", {})
 
-        with patch(
-            "litellm.proxy.auth.user_api_key_auth.user_api_key_auth",
-            return_value=MagicMock(
-                user_id="test-user",
-                team_id=None,
-                team_models=[],
-                models=[],
-                user_role="proxy_admin",
-            ),
-        ):
-            # Test with custom pagination parameters
-            response = client.get(
-                "/v2/model/info",
-                params={"page": 2, "size": 25},
-                headers={"Authorization": "Bearer sk-test"},
-            )
+        # Test with custom pagination parameters
+        response = client.get(
+            "/v2/model/info",
+            params={"page": 2, "size": 25},
+            headers={"Authorization": "Bearer sk-test"},
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -153,20 +128,10 @@ class TestEmptyModelListHandling:
         monkeypatch.setattr("litellm.proxy.proxy_server.user_model", None)
         monkeypatch.setattr("litellm.proxy.proxy_server.general_settings", {})
 
-        with patch(
-            "litellm.proxy.auth.user_api_key_auth.user_api_key_auth",
-            return_value=MagicMock(
-                user_id="test-user",
-                team_id=None,
-                team_models=[],
-                models=[],
-                user_role="proxy_admin",
-            ),
-        ):
-            response = client.get(
-                "/model_group/info",
-                headers={"Authorization": "Bearer sk-test"},
-            )
+        response = client.get(
+            "/model_group/info",
+            headers={"Authorization": "Bearer sk-test"},
+        )
 
         assert response.status_code == 200
         assert response.json() == {"data": []}
@@ -186,20 +151,10 @@ class TestEmptyModelListHandling:
         monkeypatch.setattr("litellm.proxy.proxy_server.user_model", None)
         monkeypatch.setattr("litellm.proxy.proxy_server.general_settings", {})
 
-        with patch(
-            "litellm.proxy.auth.user_api_key_auth.user_api_key_auth",
-            return_value=MagicMock(
-                user_id="test-user",
-                team_id=None,
-                team_models=[],
-                models=[],
-                user_role="proxy_admin",
-            ),
-        ):
-            response = client.get(
-                "/model_group/info",
-                headers={"Authorization": "Bearer sk-test"},
-            )
+        response = client.get(
+            "/model_group/info",
+            headers={"Authorization": "Bearer sk-test"},
+        )
 
         assert response.status_code == 200
         assert response.json() == {"data": []}

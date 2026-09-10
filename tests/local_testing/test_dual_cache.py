@@ -1,5 +1,4 @@
 import os
-import sys
 import time
 import traceback
 from litellm._uuid import uuid
@@ -7,11 +6,7 @@ from litellm._uuid import uuid
 from dotenv import load_dotenv
 
 load_dotenv()
-import os
 
-sys.path.insert(
-    0, os.path.abspath("../..")
-)  # Adds the parent directory to the system path
 import asyncio
 import hashlib
 import random
@@ -74,9 +69,10 @@ async def test_dual_cache_local_only(is_async):
     redis_set_method = "async_set_cache" if is_async else "set_cache"
     redis_get_method = "async_get_cache" if is_async else "get_cache"
 
-    with patch.object(redis_cache, redis_set_method) as mock_redis_set, patch.object(
-        redis_cache, redis_get_method
-    ) as mock_redis_get:
+    with (
+        patch.object(redis_cache, redis_set_method) as mock_redis_set,
+        patch.object(redis_cache, redis_get_method) as mock_redis_get,
+    ):
 
         # Set value with local_only=True
         if is_async:

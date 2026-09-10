@@ -4,13 +4,10 @@ Integration tests for async_post_call_streaming_hook.
 Tests verify that the streaming hook can transform streaming responses sent to clients.
 """
 
-import os
-import sys
 import pytest
 from typing import Any
 from unittest.mock import patch, MagicMock
 
-sys.path.insert(0, os.path.abspath("../../../.."))
 
 import litellm
 from litellm.integrations.custom_logger import CustomLogger
@@ -43,7 +40,9 @@ async def test_streaming_hook_transforms_response():
     """
     Test that async_post_call_streaming_hook can transform streaming responses.
     """
-    transformer = StreamingResponseTransformerLogger(transform_content="Modified streaming response")
+    transformer = StreamingResponseTransformerLogger(
+        transform_content="Modified streaming response"
+    )
 
     with patch("litellm.callbacks", [transformer]):
         from litellm.proxy.utils import ProxyLogging
@@ -138,7 +137,7 @@ async def test_streaming_hook_works_with_sse_format():
     This was the only supported format before the fix.
     """
     transformer = StreamingResponseTransformerLogger(
-        transform_content="data: {\"error\": \"custom error\"}\n\n"
+        transform_content='data: {"error": "custom error"}\n\n'
     )
 
     with patch("litellm.callbacks", [transformer]):
@@ -168,7 +167,7 @@ async def test_streaming_hook_works_with_sse_format():
         )
 
         # Verify SSE-formatted response is returned
-        assert result == "data: {\"error\": \"custom error\"}\n\n"
+        assert result == 'data: {"error": "custom error"}\n\n'
 
 
 @pytest.mark.asyncio

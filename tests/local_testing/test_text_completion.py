@@ -1,18 +1,12 @@
 import asyncio
 import json
-import os
-import sys
 import traceback
 
 from dotenv import load_dotenv
 
 load_dotenv()
 import io
-import os
 
-sys.path.insert(
-    0, os.path.abspath("../..")
-)  # Adds the parent directory to the system path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -3971,7 +3965,9 @@ def test_completion_hf_prompt_array():
 # test_completion_hf_prompt_array()
 
 
-@pytest.mark.skip(reason="HF Inference API is unstable, this is now the 3rd time it's stopped working")
+@pytest.mark.skip(
+    reason="HF Inference API is unstable, this is now the 3rd time it's stopped working"
+)
 def test_text_completion_stream():
     try:
         for _ in range(2):  # check if closed client used
@@ -4034,7 +4030,7 @@ def test_async_text_completion_together_ai():
     async def test_get_response():
         try:
             response = await litellm.atext_completion(
-                model="together_ai/mistralai/Mixtral-8x7B-Instruct-v0.1",
+                model="together_ai/openai/gpt-oss-20b",
                 prompt="good morning",
                 max_tokens=10,
             )

@@ -3,14 +3,12 @@
 import asyncio
 import inspect
 import os
-import sys
 import time
 import traceback
 from datetime import datetime
 
 import pytest
 
-sys.path.insert(0, os.path.abspath("../.."))
 from typing import List, Literal, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -267,7 +265,10 @@ class CompletionCustomHandler(
         try:
             print("CompletionCustomHandler.async_log_success_event, kwargs: ", kwargs)
             self.states.append("async_success")
-            print("############### CompletionCustomHandler async success, kwargs: ", kwargs)
+            print(
+                "############### CompletionCustomHandler async success, kwargs: ",
+                kwargs,
+            )
             ## START TIME
             assert isinstance(start_time, datetime)
             ## END TIME
@@ -396,9 +397,9 @@ async def test_async_chat_azure():
                 "model_name": "gpt-4.1-nano",  # openai model name
                 "litellm_params": {  # params for litellm completion/embedding call
                     "model": "azure/gpt-4.1-mini",
-                    "api_key": os.getenv("AZURE_API_KEY"),
+                    "api_key": os.getenv("AZURE_AI_API_KEY"),
                     "api_version": os.getenv("AZURE_API_VERSION"),
-                    "api_base": os.getenv("AZURE_API_BASE"),
+                    "api_base": os.getenv("AZURE_AI_API_BASE"),
                 },
                 "model_info": {"base_model": "azure/gpt-4.1-mini"},
                 "tpm": 240000,
@@ -438,12 +439,12 @@ async def test_async_chat_azure():
         # failure
         model_list = [
             {
-                "model_name": "gpt-3.5-turbo",  # openai model name
+                "model_name": "gpt-5-mini",  # openai model name
                 "litellm_params": {  # params for litellm completion/embedding call
                     "model": "azure/gpt-4o-new-test",
                     "api_key": "my-bad-key",
                     "api_version": os.getenv("AZURE_API_VERSION"),
-                    "api_base": os.getenv("AZURE_API_BASE"),
+                    "api_base": os.getenv("AZURE_AI_API_BASE"),
                 },
                 "tpm": 240000,
                 "rpm": 1800,
@@ -455,7 +456,7 @@ async def test_async_chat_azure():
         router3 = Router(model_list=model_list, num_retries=0)  # type: ignore
         try:
             response = await router3.acompletion(
-                model="gpt-3.5-turbo",
+                model="gpt-5-mini",
                 messages=[{"role": "user", "content": "Hi 👋 - i'm openai"}],
             )
             print(f"response in router3 acompletion: {response}")
@@ -483,9 +484,9 @@ async def test_async_embedding_azure():
                 "model_name": "azure-embedding-model",  # openai model name
                 "litellm_params": {  # params for litellm completion/embedding call
                     "model": "azure/text-embedding-ada-002",
-                    "api_key": os.getenv("AZURE_API_KEY"),
+                    "api_key": os.getenv("AZURE_AI_API_KEY"),
                     "api_version": os.getenv("AZURE_API_VERSION"),
-                    "api_base": os.getenv("AZURE_API_BASE"),
+                    "api_base": os.getenv("AZURE_AI_API_BASE"),
                 },
                 "tpm": 240000,
                 "rpm": 1800,
@@ -506,7 +507,7 @@ async def test_async_embedding_azure():
                     "model": "azure/text-embedding-ada-002",
                     "api_key": "my-bad-key",
                     "api_version": os.getenv("AZURE_API_VERSION"),
-                    "api_base": os.getenv("AZURE_API_BASE"),
+                    "api_base": os.getenv("AZURE_AI_API_BASE"),
                 },
                 "tpm": 240000,
                 "rpm": 1800,
@@ -544,12 +545,12 @@ async def test_async_chat_azure_with_fallbacks():
         # with fallbacks
         model_list = [
             {
-                "model_name": "gpt-3.5-turbo",  # openai model name
+                "model_name": "gpt-5-mini",  # openai model name
                 "litellm_params": {  # params for litellm completion/embedding call
                     "model": "azure/gpt-4.1-mini",
                     "api_key": "my-bad-key",
                     "api_version": os.getenv("AZURE_API_VERSION"),
-                    "api_base": os.getenv("AZURE_API_BASE"),
+                    "api_base": os.getenv("AZURE_AI_API_BASE"),
                 },
                 "tpm": 240000,
                 "rpm": 1800,
@@ -565,13 +566,13 @@ async def test_async_chat_azure_with_fallbacks():
         ]
         router = Router(
             model_list=model_list,
-            fallbacks=[{"gpt-3.5-turbo": ["gpt-3.5-turbo-16k"]}],
+            fallbacks=[{"gpt-5-mini": ["gpt-3.5-turbo-16k"]}],
             retry_policy=litellm.router.RetryPolicy(
                 AuthenticationErrorRetries=0,
             ),
         )  # type: ignore
         response = await router.acompletion(
-            model="gpt-3.5-turbo",
+            model="gpt-5-mini",
             messages=[{"role": "user", "content": "Hi 👋 - i'm openai"}],
         )
         await asyncio.sleep(2)
@@ -608,9 +609,9 @@ async def test_async_completion_azure_caching():
             "model_name": "gpt-4.1-nano",  # openai model name
             "litellm_params": {  # params for litellm completion/embedding call
                 "model": "azure/gpt-4.1-mini",
-                "api_key": os.getenv("AZURE_API_KEY"),
+                "api_key": os.getenv("AZURE_AI_API_KEY"),
                 "api_version": os.getenv("AZURE_API_VERSION"),
-                "api_base": os.getenv("AZURE_API_BASE"),
+                "api_base": os.getenv("AZURE_AI_API_BASE"),
             },
             "tpm": 240000,
             "rpm": 1800,
@@ -664,23 +665,23 @@ async def test_async_completion_azure_caching_streaming():
     )
     litellm.callbacks = [customHandler_caching]
     unique_time = uuid.uuid4()
-    
+
     # Use Router instead of direct litellm.acompletion to get router-specific metadata
     model_list = [
         {
             "model_name": "gpt-4.1-nano",
             "litellm_params": {
                 "model": "azure/gpt-4.1-mini",
-                "api_key": os.getenv("AZURE_API_KEY"),
+                "api_key": os.getenv("AZURE_AI_API_KEY"),
                 "api_version": os.getenv("AZURE_API_VERSION"),
-                "api_base": os.getenv("AZURE_API_BASE"),
+                "api_base": os.getenv("AZURE_AI_API_BASE"),
             },
             "tpm": 240000,
             "rpm": 1800,
         },
     ]
     router = Router(model_list=model_list)
-    
+
     response1 = await router.acompletion(
         model="gpt-4.1-nano",
         messages=[
@@ -725,22 +726,26 @@ async def test_async_embedding_azure_caching():
         port=os.environ["REDIS_PORT"],
         password=os.environ["REDIS_PASSWORD"],
     )
-    router = Router(model_list=[{
-        "model_name": "text-embedding-ada-002",
-        "litellm_params": {
-            "model": "openai/text-embedding-ada-002",
-        },
-    }])
+    router = Router(
+        model_list=[
+            {
+                "model_name": "text-embedding-3-small",
+                "litellm_params": {
+                    "model": "openai/text-embedding-3-small",
+                },
+            }
+        ]
+    )
     litellm.callbacks = [customHandler_caching]
     unique_time = time.time()
     response1 = await router.aembedding(
-        model="text-embedding-ada-002",
+        model="text-embedding-3-small",
         input=[f"good morning from litellm1 {unique_time}"],
         caching=True,
     )
     await asyncio.sleep(1)  # set cache is async for aembedding()
     response2 = await router.aembedding(
-        model="text-embedding-ada-002",
+        model="text-embedding-3-small",
         input=[f"good morning from litellm1 {unique_time}"],
         caching=True,
     )
@@ -769,7 +774,7 @@ async def test_rate_limit_error_callback():
             {
                 "model_name": "my-test-gpt",
                 "litellm_params": {
-                    "model": "gpt-3.5-turbo",
+                    "model": "gpt-5-mini",
                     "mock_response": "litellm.RateLimitError",
                 },
             }
@@ -818,4 +823,3 @@ async def test_rate_limit_error_callback():
 
         assert "original_model_group" in mock_client.call_args.kwargs
         assert mock_client.call_args.kwargs["original_model_group"] == "my-test-gpt"
-

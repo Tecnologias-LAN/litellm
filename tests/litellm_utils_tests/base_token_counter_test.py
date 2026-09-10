@@ -10,16 +10,11 @@ Usage:
     the abstract methods to provide provider-specific configuration.
 """
 
-import os
-import sys
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
 import pytest
 
-sys.path.insert(
-    0, os.path.abspath("../..")
-)  # Adds the parent directory to the system path
 
 from litellm.llms.base_llm.base_utils import BaseTokenCounter
 from litellm.types.utils import TokenCountResponse
@@ -69,7 +64,11 @@ class BaseTokenCounterTest(ABC):
             yield
         except Exception as e:
             error_str = str(e).lower()
-            if "api key" in error_str or "api_key" in error_str or "unauthorized" in error_str:
+            if (
+                "api key" in error_str
+                or "api_key" in error_str
+                or "unauthorized" in error_str
+            ):
                 pytest.skip(f"Missing or invalid credentials: {e}")
             raise
 
@@ -100,10 +99,16 @@ class BaseTokenCounterTest(ABC):
         print(f"Token count result: {result}")
 
         assert result is not None, "Token counter should return a result"
-        assert isinstance(result, TokenCountResponse), "Result should be TokenCountResponse"
-        assert result.total_tokens > 0, f"Token count should be > 0, got {result.total_tokens}"
+        assert isinstance(
+            result, TokenCountResponse
+        ), "Result should be TokenCountResponse"
+        assert (
+            result.total_tokens > 0
+        ), f"Token count should be > 0, got {result.total_tokens}"
         assert result.tokenizer_type is not None, "tokenizer_type should be set"
-        assert result.error is not True, f"Token counting should not error: {result.error_message}"
+        assert (
+            result.error is not True
+        ), f"Token counting should not error: {result.error_message}"
 
     def test_should_use_token_counting_api(self):
         """
@@ -119,7 +124,9 @@ class BaseTokenCounterTest(ABC):
             custom_llm_provider=provider
         )
 
-        assert result is True, f"should_use_token_counting_api should return True for {provider}"
+        assert (
+            result is True
+        ), f"should_use_token_counting_api should return True for {provider}"
 
         # Also verify it returns False for other providers
         other_provider = "some_other_provider_that_doesnt_exist"
@@ -127,4 +134,6 @@ class BaseTokenCounterTest(ABC):
             custom_llm_provider=other_provider
         )
 
-        assert result_other is False, f"should_use_token_counting_api should return False for {other_provider}"
+        assert (
+            result_other is False
+        ), f"should_use_token_counting_api should return False for {other_provider}"

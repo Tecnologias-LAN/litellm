@@ -3,14 +3,11 @@ Unit tests for text_completion with token IDs (list of integers) as prompt.
 Tests the fix for https://github.com/BerriAI/litellm/issues/17118
 """
 
-import os
-import sys
 
 import pytest
 import respx
 from httpx import Response
 
-sys.path.insert(0, os.path.abspath("../../../../.."))
 
 import litellm
 from litellm import text_completion
@@ -46,9 +43,7 @@ class TestTextCompletionTokenIds:
     """Test text_completion with token IDs as prompt."""
 
     @respx.mock
-    def test_completion_prompt_token_ids(
-        self, text_completion_response, monkeypatch
-    ):
+    def test_completion_prompt_token_ids(self, text_completion_response, monkeypatch):
         """
         Test text_completion with a list of token IDs (integers).
         This tests the fix for https://github.com/BerriAI/litellm/issues/17118

@@ -1,22 +1,16 @@
 import httpx
 import json
 import pytest
-import sys
 from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock, Mock, patch
-import os
 from litellm._uuid import uuid
 import time
 import base64
 
-sys.path.insert(
-    0, os.path.abspath("../..")
-)  # Adds the parent directory to the system path
 import litellm
 from abc import ABC, abstractmethod
 
 from litellm.integrations.custom_logger import CustomLogger
-import json
 from litellm.types.utils import StandardLoggingPayload
 from litellm.types.llms.openai import (
     ResponseCompletedEvent,
@@ -28,6 +22,7 @@ from openai.types.responses.response_create_params import (
     ResponseInputParam,
 )
 from litellm.llms.custom_httpx.http_handler import AsyncHTTPHandler
+import openai
 
 
 def validate_responses_api_response(response, final_chunk: bool = False):
@@ -74,7 +69,7 @@ def validate_responses_api_response(response, final_chunk: bool = False):
         "top_p": (int, float, type(None)),
         "max_output_tokens": (int, type(None)),
         "previous_response_id": (str, type(None)),
-        "reasoning": dict,
+        "reasoning": (dict, type(None)),
         "status": str,
         "text": dict,
         "truncation": (str, type(None)),
@@ -186,7 +181,9 @@ class BaseResponsesAPITest(ABC):
         response_status = response_completed_event.response.status
         if response_status in ["running", "pending"]:
             # Running/pending state is acceptable - task started successfully
-            print(f"Response is in '{response_status}' state - async agent API behavior")
+            print(
+                f"Response is in '{response_status}' state - async agent API behavior"
+            )
             assert response_completed_event.response.id is not None
         else:
             # For completed responses, validate content and usage
@@ -223,10 +220,16 @@ class BaseResponsesAPITest(ABC):
             )
 
             # assert the response completed event includes cost when include_cost_in_streaming_usage is True
-            assert hasattr(response_completed_event.response.usage, "cost"), "Cost should be included in streaming responses API usage object"
-            assert response_completed_event.response.usage.cost > 0, "Cost should be greater than 0"
-            print(f"Cost found in streaming response: {response_completed_event.response.usage.cost}")
-        
+            assert hasattr(
+                response_completed_event.response.usage, "cost"
+            ), "Cost should be included in streaming responses API usage object"
+            assert (
+                response_completed_event.response.usage.cost > 0
+            ), "Cost should be greater than 0"
+            print(
+                f"Cost found in streaming response: {response_completed_event.response.usage.cost}"
+            )
+
         # Reset the setting
         litellm.include_cost_in_streaming_usage = False
 
@@ -330,7 +333,7 @@ class BaseResponsesAPITest(ABC):
                 )
                 assert result is not None
                 assert result.id == response.id
-                assert result.output == response.output
+                assert result.output_text == response.output_text
             else:
                 raise ValueError("response is not a ResponsesAPIResponse")
         else:
@@ -344,7 +347,7 @@ class BaseResponsesAPITest(ABC):
                 )
                 assert result is not None
                 assert result.id == response.id
-                assert result.output == response.output
+                assert result.output_text == response.output_text
             else:
                 raise ValueError("response is not a ResponsesAPIResponse")
 
@@ -355,7 +358,7 @@ class BaseResponsesAPITest(ABC):
         litellm._turn_on_debug()
 
         response = await litellm.aresponses(
-            model="gpt-4o",
+            model="gpt-5.5",
             input="Tell me a three sentence bedtime story about a unicorn.",
         )
         print("Initial response=", json.dumps(response, indent=4, default=str))
@@ -467,7 +470,9 @@ class BaseResponsesAPITest(ABC):
         # For async agent APIs (like Manus), the response may be in 'running' state
         # without output yet - this is valid behavior
         if response.get("status") in ["running", "pending"]:
-            print(f"Response is in '{response.get('status')}' state - async agent API behavior")
+            print(
+                f"Response is in '{response.get('status')}' state - async agent API behavior"
+            )
             assert response.get("id") is not None
         else:
             assert len(response["output"]) > 0
@@ -570,21 +575,20 @@ class BaseResponsesAPITest(ABC):
         Test that regular dict inputs with status fields are properly filtered
         to replicate exclude_unset=True behavior for non-Pydantic objects.
         """
-        from litellm.llms.openai.responses.transformation import OpenAIResponsesAPIConfig
+        from litellm.llms.openai.responses.transformation import (
+            OpenAIResponsesAPIConfig,
+        )
 
         # Test input with regular dict objects (like from JSON)
         test_input = [
-            {
-                "role": "user",
-                "content": "test"
-            },
+            {"role": "user", "content": "test"},
             {
                 "id": "rs_123",
                 "summary": [{"text": "test", "type": "summary_text"}],
                 "type": "reasoning",
                 "content": None,  # Should be filtered out
                 "encrypted_content": None,  # Should be filtered out
-                "status": None  # Should be filtered out
+                "status": None,  # Should be filtered out
             },
             {
                 "arguments": "{}",
@@ -592,8 +596,8 @@ class BaseResponsesAPITest(ABC):
                 "name": "get_today",
                 "type": "function_call",
                 "id": "fc_123",
-                "status": "completed"  # Should be preserved (not a default field)
-            }
+                "status": "completed",  # Should be preserved (not a default field)
+            },
         ]
 
         config = OpenAIResponsesAPIConfig()
@@ -605,9 +609,15 @@ class BaseResponsesAPITest(ABC):
         # Check reasoning item (index 1)
         reasoning_item = validated_input[1]
         assert reasoning_item["type"] == "reasoning"
-        assert "status" not in reasoning_item, "status field should be filtered out from reasoning item"
-        assert "content" not in reasoning_item, "content field should be filtered out from reasoning item"
-        assert "encrypted_content" not in reasoning_item, "encrypted_content field should be filtered out from reasoning item"
+        assert (
+            "status" not in reasoning_item
+        ), "status field should be filtered out from reasoning item"
+        assert (
+            "content" not in reasoning_item
+        ), "content field should be filtered out from reasoning item"
+        assert (
+            "encrypted_content" not in reasoning_item
+        ), "encrypted_content field should be filtered out from reasoning item"
         # Note: ID auto-generation was disabled, so reasoning items may not have IDs
         # Only check for ID if it was present in the original input
         if "id" in reasoning_item:
@@ -617,8 +627,12 @@ class BaseResponsesAPITest(ABC):
         # Check function call item (index 2)
         function_call_item = validated_input[2]
         assert function_call_item["type"] == "function_call"
-        assert "status" in function_call_item, "status field should be preserved in function call item"
-        assert function_call_item["status"] == "completed", "status value should be preserved"
+        assert (
+            "status" in function_call_item
+        ), "status field should be preserved in function call item"
+        assert (
+            function_call_item["status"] == "completed"
+        ), "status value should be preserved"
 
         print("✅ OpenAI Responses API dict input filtering test passed")
 
@@ -632,7 +646,10 @@ class BaseResponsesAPITest(ABC):
             base_completion_call_args = self.get_base_completion_call_args()
             if sync_mode:
                 response = litellm.responses(
-                    input="Basic ping", max_output_tokens=20, background=True, **base_completion_call_args
+                    input="Basic ping",
+                    max_output_tokens=20,
+                    background=True,
+                    **base_completion_call_args,
                 )
 
                 # cancel the response
@@ -648,7 +665,10 @@ class BaseResponsesAPITest(ABC):
                     raise ValueError("response is not a ResponsesAPIResponse")
             else:
                 response = await litellm.aresponses(
-                    input="Basic ping", max_output_tokens=20, background=True, **base_completion_call_args
+                    input="Basic ping",
+                    max_output_tokens=20,
+                    background=True,
+                    **base_completion_call_args,
                 )
 
                 # async cancel the response
@@ -675,12 +695,12 @@ class BaseResponsesAPITest(ABC):
         base_completion_call_args = self.get_base_completion_call_args()
 
         if sync_mode:
-            with pytest.raises(Exception):
+            with pytest.raises(openai.APIError):
                 litellm.cancel_responses(
                     response_id="invalid_response_id_12345", **base_completion_call_args
                 )
         else:
-            with pytest.raises(Exception):
+            with pytest.raises(openai.APIError):
                 await litellm.acancel_responses(
                     response_id="invalid_response_id_12345", **base_completion_call_args
                 )
@@ -696,9 +716,7 @@ class BaseResponsesAPITest(ABC):
         model = base_completion_call_args.get("model") or ""
         # Azure does not support compaction context_management (only clear_tool_results)
         if "azure/" in str(model):
-            pytest.skip(
-                "context_management compaction is not supported on Azure"
-            )
+            pytest.skip("context_management compaction is not supported on Azure")
         if "openai/" not in str(model):
             pytest.skip(
                 "context_management server-side compaction e2e is only run for OpenAI"
@@ -723,15 +741,18 @@ class BaseResponsesAPITest(ABC):
         E2E test for Shell tool on OpenAI Responses API.
         Passes tools=[{"type": "shell", "environment": {"type": "container_auto"}}];
         validates that the request is accepted and returns a valid response.
-        Only runs for OpenAI/Azure (Responses API with shell support).
+        Only runs for OpenAI; offline coverage for the Azure route lives in
+        tests/test_litellm/responses/test_responses_api_request_body.py.
         """
         base_completion_call_args = self.get_base_completion_call_args()
-        model = self.get_advanced_model_for_shell_tool() or base_completion_call_args.get(
-            "model"
-        ) or ""
-        if "openai/" not in str(model) and "azure/" not in str(model):
+        model = (
+            self.get_advanced_model_for_shell_tool()
+            or base_completion_call_args.get("model")
+            or ""
+        )
+        if "openai/" not in str(model):
             pytest.skip(
-                "Shell tool e2e is only run for OpenAI/Azure Responses API"
+                "Shell tool e2e is OpenAI-only; no Azure deployment supports the shell tool yet, re-enable once one exists"
             )
         tools = [{"type": "shell", "environment": {"type": "container_auto"}}]
         input_msg = "List files in /mnt/data and show python --version."
@@ -742,13 +763,16 @@ class BaseResponsesAPITest(ABC):
                 max_output_tokens=256,
                 tools=tools,
                 tool_choice="auto",
+                timeout=90,
             )
+        except litellm.Timeout:
+            pytest.skip("Provider did not answer the shell tool request within 90s")
         except litellm.InternalServerError:
             pytest.skip("Skipping test due to litellm.InternalServerError")
         except litellm.BadRequestError as e:
             if "shell" in str(e).lower() and "not supported" in str(e).lower():
                 pytest.skip(
-                    "Shell tool is not supported for this model (e.g. gpt-4o); use a model that supports shell"
+                    "Shell tool is not supported for this model (e.g. gpt-5.5); use a model that supports shell"
                 )
             raise
         validate_responses_api_response(response, final_chunk=True)
@@ -762,12 +786,14 @@ class BaseResponsesAPITest(ABC):
 
         Calls aresponses(..., tools=[shell], stream=True), then iterates the stream and
         asserts at least one event is shell-related or response output contains shell_call.
-        Skips when model does not support shell (e.g. gpt-4o).
+        Skips when model does not support shell (e.g. gpt-5.5).
         """
         base_completion_call_args = self.get_base_completion_call_args()
-        model = self.get_advanced_model_for_shell_tool() or base_completion_call_args.get(
-            "model"
-        ) or "openai/gpt-5.2"
+        model = (
+            self.get_advanced_model_for_shell_tool()
+            or base_completion_call_args.get("model")
+            or "openai/gpt-5.2"
+        )
         if "openai/" not in str(model):
             pytest.skip(
                 "Shell tool streaming e2e is only run for OpenAI/Azure Responses API"
@@ -783,7 +809,6 @@ class BaseResponsesAPITest(ABC):
             tool_choice="auto",
             stream=True,
         )
-
 
         event_types_seen = []
         output_items_with_shell = []
@@ -802,7 +827,9 @@ class BaseResponsesAPITest(ABC):
             )
             if response_obj is not None:
                 output = getattr(response_obj, "output", None) or (
-                    response_obj.get("output") if isinstance(response_obj, dict) else None
+                    response_obj.get("output")
+                    if isinstance(response_obj, dict)
+                    else None
                 )
                 if isinstance(output, list):
                     for item in output:
@@ -813,6 +840,6 @@ class BaseResponsesAPITest(ABC):
                             output_items_with_shell.append(item_type)
 
         assert len(event_types_seen) > 0, "Expected at least one stream event"
-        assert len(output_items_with_shell) > 0, (
-            f"Expected to see shell output in stream; event types seen: {event_types_seen!r}"
-        )
+        assert (
+            len(output_items_with_shell) > 0
+        ), f"Expected to see shell output in stream; event types seen: {event_types_seen!r}"

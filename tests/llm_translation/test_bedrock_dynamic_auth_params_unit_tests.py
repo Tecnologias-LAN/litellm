@@ -1,27 +1,16 @@
 # tests/llm_translation/test_base_aws_llm.py
-import os
 import json
 import pytest
 from unittest.mock import patch
 from botocore.credentials import Credentials
-import sys
 
-sys.path.insert(
-    0, os.path.abspath("../..")
-)  # Adds the parent directory to the system path
 
 import litellm
 from litellm.llms.custom_httpx.http_handler import HTTPHandler
 from unittest.mock import Mock
 from litellm.llms.bedrock.base_aws_llm import BaseAWSLLM
 
-import json
-import pytest
-from unittest.mock import patch, Mock
 
-import litellm
-from litellm.llms.custom_httpx.http_handler import HTTPHandler
-from litellm.llms.bedrock.base_aws_llm import BaseAWSLLM
 
 
 def test_bedrock_completion_with_region_name():
@@ -66,12 +55,9 @@ def test_bedrock_completion_with_region_name():
             mock_post.call_args.kwargs["url"]
             == "https://bedrock-runtime.us-west-12.amazonaws.com/model/cohere.command-r-v1:0/invoke"
         )
-        assert (
-            mock_post.call_args.kwargs["data"]
-            == json.dumps({"message": "Hello, world!", "chat_history": []}).encode(
-                "utf-8"
-            )
-        )
+        assert mock_post.call_args.kwargs["data"] == json.dumps(
+            {"message": "Hello, world!", "chat_history": []}
+        ).encode("utf-8")
 
         # Print the URL and body of the HTTP request.
         # assert request was signed with the correct region

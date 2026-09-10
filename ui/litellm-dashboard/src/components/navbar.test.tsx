@@ -1,4 +1,5 @@
 import userEvent from "@testing-library/user-event";
+import React from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithProviders, screen, waitFor } from "../../tests/test-utils";
 import Navbar from "./navbar";
@@ -6,10 +7,74 @@ import Navbar from "./navbar";
 // Mock the hooks and utilities
 vi.mock("@/components/networking", () => ({
   getProxyBaseUrl: vi.fn(() => "http://localhost:4000"),
+  serverRootPath: "",
 }));
 
+vi.mock("@/app/(dashboard)/hooks/useDisableBouncingIcon", () => ({
+  useDisableBouncingIcon: () => false,
+}));
+
+vi.mock("./Navbar/BlogDropdown/BlogDropdown", () => ({
+  BlogDropdown: () => <div data-testid="blog-dropdown">Blog</div>,
+}));
+
+const mockUserDropdownData = vi.hoisted(() => ({
+  current: () => ({
+    userId: "test-user",
+    userEmail: "test@example.com",
+    userRole: "Admin",
+    premiumUser: false,
+  }),
+}));
+
+vi.mock("./Navbar/UserDropdown/UserDropdown", async (importOriginal) => {
+  const React = await import("react");
+  const { useState } = React;
+  const localStorageUtils = await import("@/utils/localStorageUtils");
+  return {
+    default: function MockUserDropdown({ onLogout }: { onLogout: () => void }) {
+      const { userId, userEmail, userRole, premiumUser } = mockUserDropdownData.current();
+      const [open, setOpen] = useState(false);
+      return (
+        <div>
+          <button type="button" aria-label="Open account menu" onClick={() => setOpen(!open)}>
+            Account
+          </button>
+          {open && (
+            <div data-testid="user-dropdown-content">
+              <span>{userId}</span>
+              <span>{userRole}</span>
+              <span>{userEmail}</span>
+              {premiumUser && <span>Premium</span>}
+              <button type="button" onClick={() => onLogout()}>
+                Logout
+              </button>
+              <label>
+                <input
+                  type="checkbox"
+                  aria-label="Toggle hide new feature indicators"
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      localStorageUtils.setLocalStorageItem("disableShowNewBadge", "true");
+                      localStorageUtils.emitLocalStorageChange("disableShowNewBadge");
+                    }
+                  }}
+                />
+                Toggle hide new feature indicators
+              </label>
+            </div>
+          )}
+        </div>
+      );
+    },
+  };
+});
+
 vi.mock("@/utils/proxyUtils", () => ({
-  fetchProxySettings: vi.fn(),
+  fetchProxySettings: vi.fn().mockResolvedValue({
+    PROXY_BASE_URL: "",
+    PROXY_LOGOUT_URL: "https://example.com/logout",
+  }),
 }));
 
 // Mock CommunityEngagementButtons component
@@ -28,21 +93,26 @@ vi.mock("./Navbar/CommunityEngagementButtons/CommunityEngagementButtons", () => 
 
 // Create mock functions that can be controlled in tests
 let mockUseThemeImpl = () => ({ logoUrl: null as string | null });
-let mockUseHealthReadinessImpl = () => ({ data: null as any });
+let mockUseHealthReadinessDetailsImpl = () => ({ data: null as any });
 let mockGetLocalStorageItemImpl = (key: string) => null as string | null;
-let mockUseAuthorizedImpl = () => ({
+const mockUseAuthorizedImpl = () => ({
   userId: "test-user",
   userEmail: "test@example.com",
   userRole: "Admin",
   premiumUser: false,
 });
 
+const useHealthReadinessDetailsSpy = vi.hoisted(() => vi.fn());
+
 vi.mock("@/contexts/ThemeContext", () => ({
   useTheme: () => mockUseThemeImpl(),
 }));
 
-vi.mock("@/app/(dashboard)/hooks/healthReadiness/useHealthReadiness", () => ({
-  useHealthReadiness: () => mockUseHealthReadinessImpl(),
+vi.mock("@/app/(dashboard)/hooks/healthReadiness/useHealthReadinessDetails", () => ({
+  useHealthReadinessDetails: (accessToken: string | null | undefined) => {
+    useHealthReadinessDetailsSpy(accessToken);
+    return mockUseHealthReadinessDetailsImpl();
+  },
 }));
 
 vi.mock("@/app/(dashboard)/hooks/useAuthorized", () => ({
@@ -69,30 +139,44 @@ Object.defineProperty(window, "location", {
 
 describe("Navbar", () => {
   const defaultProps = {
-    userID: "test-user",
-    userEmail: "test@example.com",
-    userRole: "Admin",
-    premiumUser: false,
-    proxySettings: {},
-    setProxySettings: vi.fn(),
     accessToken: "test-token",
     isPublicPage: false,
-    isDarkMode: false,
-    toggleDarkMode: vi.fn(),
   };
 
   it("should render without crashing", () => {
     renderWithProviders(<Navbar {...defaultProps} />);
 
+    expect(screen.getByRole("button", { name: /^notifications$/i })).toBeInTheDocument();
     expect(screen.getByText("Docs")).toBeInTheDocument();
-    expect(screen.getByText("User")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /open account menu/i })).toBeInTheDocument();
+  });
+
+  it("should link the logo to the UI home route rather than the proxy origin", () => {
+    renderWithProviders(<Navbar {...defaultProps} />);
+
+    expect(screen.getByRole("link", { name: /litellm brand/i })).toHaveAttribute("href", "/ui");
+  });
+
+  it("pairs the logo with a dark-mode variant that swaps on the dark class", () => {
+    renderWithProviders(<Navbar {...defaultProps} />);
+
+    const [light, dark] = Array.from(screen.getByRole("link", { name: /litellm brand/i }).querySelectorAll("img"));
+    const classesOf = (el: Element) => new Set(el.className.split(/\s+/));
+
+    const lightSrc = light.getAttribute("src") ?? "";
+    expect(light).toHaveAttribute("src", expect.stringMatching(/\/get_image$/));
+    expect(dark).toHaveAttribute("src", `${lightSrc}?theme=dark`);
+    expect(classesOf(light).has("dark:hidden")).toBe(true);
+    expect(classesOf(light).has("hidden")).toBe(false);
+    expect(classesOf(dark).has("hidden")).toBe(true);
+    expect(classesOf(dark).has("dark:block")).toBe(true);
   });
 
   it("should display user information in dropdown", async () => {
     const user = userEvent.setup();
     renderWithProviders(<Navbar {...defaultProps} />);
 
-    await user.click(screen.getByText("User"));
+    await user.click(screen.getByRole("button", { name: /open account menu/i }));
 
     await waitFor(() => {
       expect(screen.getByText("test-user")).toBeInTheDocument();
@@ -122,7 +206,8 @@ describe("Navbar", () => {
 
   it("should show premium user badge when premiumUser is true", async () => {
     const user = userEvent.setup();
-    mockUseAuthorizedImpl = () => ({
+    const originalCurrent = mockUserDropdownData.current;
+    mockUserDropdownData.current = () => ({
       userId: "test-user",
       userEmail: "test@example.com",
       userRole: "Admin",
@@ -130,30 +215,41 @@ describe("Navbar", () => {
     });
     renderWithProviders(<Navbar {...defaultProps} />);
 
-    await user.click(screen.getByText("User"));
+    await user.click(screen.getByRole("button", { name: /open account menu/i }));
 
     await waitFor(() => {
       expect(screen.getByText("Premium")).toBeInTheDocument();
     });
 
     // Reset mock
-    mockUseAuthorizedImpl = () => ({
-      userId: "test-user",
-      userEmail: "test@example.com",
-      userRole: "Admin",
-      premiumUser: false,
-    });
+    mockUserDropdownData.current = originalCurrent;
   });
 
   it("should show version badge when health data contains version", () => {
-    mockUseHealthReadinessImpl = () => ({ data: { litellm_version: "1.0.0" } });
+    mockUseHealthReadinessDetailsImpl = () => ({ data: { litellm_version: "1.0.0" } });
 
     renderWithProviders(<Navbar {...defaultProps} />);
 
     expect(screen.getByText("v1.0.0")).toBeInTheDocument();
 
     // Reset mock
-    mockUseHealthReadinessImpl = () => ({ data: null });
+    mockUseHealthReadinessDetailsImpl = () => ({ data: null });
+  });
+
+  it("should forward accessToken to the readiness hook", () => {
+    useHealthReadinessDetailsSpy.mockClear();
+
+    renderWithProviders(<Navbar {...defaultProps} accessToken="my-token" />);
+
+    expect(useHealthReadinessDetailsSpy).toHaveBeenCalledWith("my-token");
+  });
+
+  it("should forward a null accessToken to the readiness hook (disables the hook)", () => {
+    useHealthReadinessDetailsSpy.mockClear();
+
+    renderWithProviders(<Navbar {...defaultProps} accessToken={null} />);
+
+    expect(useHealthReadinessDetailsSpy).toHaveBeenCalledWith(null);
   });
 
   it("should use custom logo from theme context", () => {
@@ -168,14 +264,15 @@ describe("Navbar", () => {
     mockUseThemeImpl = () => ({ logoUrl: null });
   });
 
-  it("should hide user dropdown on public pages", () => {
+  it("should hide user dropdown and notifications on public pages", () => {
     const publicPageProps = { ...defaultProps, isPublicPage: true };
     renderWithProviders(<Navbar {...publicPageProps} />);
 
-    expect(screen.queryByText("User")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /open account menu/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^notifications$/i })).not.toBeInTheDocument();
   });
 
-  it("should handle hide new features toggle", async () => {
+  it("should handle hide new feature indicators toggle", async () => {
     const user = userEvent.setup();
 
     // Initially disabled
@@ -186,7 +283,7 @@ describe("Navbar", () => {
 
     renderWithProviders(<Navbar {...defaultProps} />);
 
-    await user.click(screen.getByText("User"));
+    await user.click(screen.getByRole("button", { name: /open account menu/i }));
 
     await waitFor(() => {
       expect(screen.getByText("test-user")).toBeInTheDocument();
@@ -211,7 +308,7 @@ describe("Navbar", () => {
 
     renderWithProviders(<Navbar {...defaultProps} />);
 
-    await user.click(screen.getByText("User"));
+    await user.click(screen.getByRole("button", { name: /open account menu/i }));
 
     await waitFor(() => {
       expect(screen.getByText("test-user")).toBeInTheDocument();
@@ -222,7 +319,9 @@ describe("Navbar", () => {
 
     const cookieUtils = vi.mocked(await import("@/utils/cookieUtils"));
     expect(cookieUtils.clearTokenCookies).toHaveBeenCalled();
-    expect(window.location.href).toBe("");
+    await waitFor(() => {
+      expect(window.location.href).toBe("https://example.com/logout");
+    });
   });
 
   it("should not render dark mode toggle slider", () => {

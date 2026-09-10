@@ -1,5 +1,3 @@
-import os
-import sys
 import traceback
 from litellm._uuid import uuid
 import pytest
@@ -9,21 +7,19 @@ from fastapi.routing import APIRoute
 
 load_dotenv()
 import io
-import os
 import time
 import json
 
 # this file is to test litellm/proxy
 
-sys.path.insert(
-    0, os.path.abspath("../..")
-)  # Adds the parent directory to the system path
 import litellm
 import asyncio
 from typing import Optional
 from litellm.types.utils import StandardLoggingPayload, Usage, ModelInfoBase
 from litellm.integrations.custom_logger import CustomLogger
-from litellm.litellm_core_utils.llm_cost_calc.tool_call_cost_tracking import StandardBuiltInToolCostTracking
+from litellm.litellm_core_utils.llm_cost_calc.tool_call_cost_tracking import (
+    StandardBuiltInToolCostTracking,
+)
 
 
 class TestCustomLogger(CustomLogger):
@@ -76,7 +72,9 @@ async def _verify_web_search_cost(test_custom_logger, expected_context_size):
     )
 
     # Verify total cost
-    if StandardBuiltInToolCostTracking.response_object_includes_web_search_call(response):
+    if StandardBuiltInToolCostTracking.response_object_includes_web_search_call(
+        response
+    ):
         assert (
             response_cost
             == total_token_cost
@@ -98,14 +96,14 @@ async def test_openai_web_search_logging_cost_tracking(
 ):
     """Test web search cost tracking with different search context sizes"""
     test_custom_logger = await _setup_web_search_test()
-    from litellm._uuid import uuid
-
-    
 
     request_kwargs = {
-        "model": "openai/gpt-4o-search-preview",
+        "model": "openai/gpt-5-search-api",
         "messages": [
-            {"role": "user", "content": f"What was a positive news story from today? {uuid.uuid4()}"}
+            {
+                "role": "user",
+                "content": f"What was a positive news story from today? {uuid.uuid4()}",
+            }
         ],
     }
     if web_search_options is not None:

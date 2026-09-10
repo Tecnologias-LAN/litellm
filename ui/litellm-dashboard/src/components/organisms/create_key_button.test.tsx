@@ -1,124 +1,76 @@
-import { act, fireEvent, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { renderWithProviders, screen } from "../../../tests/test-utils";
-import CreateKey from "./create_key_button";
-
-const { mockKeyCreateCall } = vi.hoisted(() => {
-  const fn = vi.fn().mockResolvedValue({
-    key: "test-api-key",
-    soft_budget: null,
-  });
-  return { mockKeyCreateCall: fn };
-});
+import { modelAvailableCall } from "../networking";
+import { fetchTeamModels, fetchUserModels } from "./create_key_button";
 
 vi.mock("../networking", () => ({
-  keyCreateCall: mockKeyCreateCall,
-  modelAvailableCall: vi.fn().mockResolvedValue({ data: [{ id: "gpt-4" }, { id: "gpt-3.5-turbo" }] }),
-  getGuardrailsList: vi.fn().mockResolvedValue({ guardrails: [] }),
-  getPromptsList: vi.fn().mockResolvedValue({ prompts: [] }),
-  proxyBaseUrl: "http://localhost:4000",
-  getPossibleUserRoles: vi.fn().mockResolvedValue({
-    Admin: { ui_label: "Admin" },
-    User: { ui_label: "User" },
-  }),
-  userFilterUICall: vi.fn().mockResolvedValue([]),
-  keyCreateServiceAccountCall: vi.fn().mockResolvedValue({
-    key: "test-service-account-key",
-    soft_budget: null,
-  }),
-  fetchMCPAccessGroups: vi.fn().mockResolvedValue([]),
+  modelAvailableCall: vi.fn(),
 }));
 
-vi.mock("../molecules/notifications_manager", () => ({
-  default: {
-    success: vi.fn(),
-    fromBackend: vi.fn(),
-    error: vi.fn(),
-    warning: vi.fn(),
-    info: vi.fn(),
-    clear: vi.fn(),
-  },
-}));
-
-vi.mock("../common_components/AccessGroupSelector", () => ({
-  default: ({ value = [], onChange }: { value?: string[]; onChange?: (v: string[]) => void }) => (
-    <input
-      data-testid="access-group-selector"
-      value={Array.isArray(value) ? value.join(",") : ""}
-      onChange={(e) => onChange?.(e.target.value ? e.target.value.split(",").map((s) => s.trim()) : [])}
-    />
-  ),
-}));
-
-describe("CreateKey", () => {
-  const defaultProps = {
-    team: null,
-    data: [],
-    teams: [],
-    addKey: vi.fn(),
-  };
-
+describe("fetchTeamModels", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    localStorage.clear();
-    mockKeyCreateCall.mockResolvedValue({
-      key: "test-api-key",
-      soft_budget: null,
-    });
+    vi.mocked(modelAvailableCall).mockReset();
   });
 
-  it("should render the CreateKey component", () => {
-    renderWithProviders(<CreateKey {...defaultProps} />);
-    expect(screen.getByRole("button", { name: /create new key/i })).toBeInTheDocument();
+  it("asks the proxy for the team-scoped model list and returns the ids", async () => {
+    vi.mocked(modelAvailableCall).mockResolvedValue({ data: [{ id: "gpt-4" }, { id: "claude-opus-4" }] });
+
+    await expect(fetchTeamModels("user-1", "Admin", "token-1", "team-1")).resolves.toStrictEqual([
+      "gpt-4",
+      "claude-opus-4",
+    ]);
+    expect(modelAvailableCall).toHaveBeenCalledWith("token-1", "user-1", "Admin", true, "team-1", true);
   });
 
-  it("should include access_group_ids in keyCreateCall payload when access groups are selected", async () => {
-    renderWithProviders(<CreateKey {...defaultProps} />);
+  it("passes a null team through rather than dropping the argument", async () => {
+    vi.mocked(modelAvailableCall).mockResolvedValue({ data: [] });
 
-    act(() => {
-      fireEvent.click(screen.getByRole("button", { name: /create new key/i }));
-    });
+    await fetchTeamModels("user-1", "Admin", "token-1", null);
 
-    await waitFor(() => {
-      expect(screen.getByLabelText(/key name/i)).toBeInTheDocument();
-    });
+    expect(modelAvailableCall).toHaveBeenCalledWith("token-1", "user-1", "Admin", true, null, true);
+  });
 
-    fireEvent.change(screen.getByLabelText(/key name/i), { target: { value: "Test Key" } });
+  it("returns an empty list and makes no call when the user id is null", async () => {
+    await expect(fetchTeamModels(null as unknown as string, "Admin", "token-1", "team-1")).resolves.toStrictEqual([]);
+    expect(modelAvailableCall).not.toHaveBeenCalled();
+  });
 
-    const optionalSettingsAccordion = screen.getByText("Optional Settings");
-    act(() => {
-      fireEvent.click(optionalSettingsAccordion);
-    });
+  it("swallows a failed lookup and returns an empty list", async () => {
+    vi.mocked(modelAvailableCall).mockRejectedValue(new Error("proxy down"));
 
-    await waitFor(() => {
-      expect(screen.getByTestId("access-group-selector")).toBeInTheDocument();
-    });
+    await expect(fetchTeamModels("user-1", "Admin", "token-1", "team-1")).resolves.toStrictEqual([]);
+  });
+});
 
-    fireEvent.change(screen.getByTestId("access-group-selector"), { target: { value: "ag-1,ag-2" } });
+describe("fetchUserModels", () => {
+  beforeEach(() => {
+    vi.mocked(modelAvailableCall).mockReset();
+  });
 
-    const modelsCombobox = screen.getAllByRole("combobox").find((el) => el.closest('[class*="ant-form-item"]')?.textContent?.includes("Models")) ||
-      screen.getAllByRole("combobox")[1];
-    if (modelsCombobox) {
-      act(() => fireEvent.mouseDown(modelsCombobox));
-      await waitFor(() => {
-        const allTeamModels = [...document.body.querySelectorAll(".ant-select-item")].find(
-          (el) => el.textContent?.includes("All Team Models"),
-        );
-        if (allTeamModels) fireEvent.click(allTeamModels);
-      });
-    }
+  it("hands the returned ids to the setter without the team-scoped arguments", async () => {
+    vi.mocked(modelAvailableCall).mockResolvedValue({ data: [{ id: "gpt-4" }] });
+    const setUserModels = vi.fn();
 
-    const createButton = screen.getByRole("button", { name: /create key/i });
-    act(() => fireEvent.click(createButton));
+    await fetchUserModels("user-1", "Admin", "token-1", setUserModels);
 
-    await waitFor(
-      () => {
-        expect(mockKeyCreateCall).toHaveBeenCalled();
-        const formValues = mockKeyCreateCall.mock.calls[0][2];
-        expect(formValues).toHaveProperty("access_group_ids");
-        expect(formValues.access_group_ids).toEqual(["ag-1", "ag-2"]);
-      },
-      { timeout: 15000 },
-    );
-  }, { timeout: 30000 });
+    expect(modelAvailableCall).toHaveBeenCalledWith("token-1", "user-1", "Admin");
+    expect(setUserModels).toHaveBeenCalledWith(["gpt-4"]);
+  });
+
+  it("leaves the setter untouched when the lookup fails", async () => {
+    vi.mocked(modelAvailableCall).mockRejectedValue(new Error("proxy down"));
+    const setUserModels = vi.fn();
+
+    await fetchUserModels("user-1", "Admin", "token-1", setUserModels);
+
+    expect(setUserModels).not.toHaveBeenCalled();
+  });
+
+  it("makes no call when the user role is null", async () => {
+    const setUserModels = vi.fn();
+
+    await fetchUserModels("user-1", null as unknown as string, "token-1", setUserModels);
+
+    expect(modelAvailableCall).not.toHaveBeenCalled();
+    expect(setUserModels).not.toHaveBeenCalled();
+  });
 });

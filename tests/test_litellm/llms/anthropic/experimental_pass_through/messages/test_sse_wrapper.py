@@ -1,39 +1,33 @@
-import os
-import sys
 
 import pytest
 from fastapi.testclient import TestClient
 
-sys.path.insert(0, os.path.abspath("../../../../.."))
 
 from litellm.llms.anthropic.experimental_pass_through.adapters.streaming_iterator import (
     AnthropicStreamWrapper,
 )
-from litellm.types.utils import Delta, ModelResponse, StreamingChoices
+from litellm.types.utils import Delta, ModelResponseStream, StreamingChoices
 
 
 # Create a simple test
 class MockCompletionStream:
     def __init__(self):
         self.responses = [
-            ModelResponse(
-                stream=True,
+            ModelResponseStream(
                 choices=[
                     StreamingChoices(
                         delta=Delta(content="Hello"), index=0, finish_reason=None
                     )
                 ],
             ),
-            ModelResponse(
-                stream=True,
+            ModelResponseStream(
                 choices=[
                     StreamingChoices(
                         delta=Delta(content=" World"), index=0, finish_reason=None
                     )
                 ],
             ),
-            ModelResponse(
-                stream=True,
+            ModelResponseStream(
                 choices=[
                     StreamingChoices(
                         delta=Delta(content=""), index=0, finish_reason="stop"
@@ -109,16 +103,14 @@ async def test_async_anthropic_sse_wrapper():
     class AsyncMockCompletionStream:
         def __init__(self):
             self.responses = [
-                ModelResponse(
-                    stream=True,
+                ModelResponseStream(
                     choices=[
                         StreamingChoices(
                             delta=Delta(content="Hello"), index=0, finish_reason=None
                         )
                     ],
                 ),
-                ModelResponse(
-                    stream=True,
+                ModelResponseStream(
                     choices=[
                         StreamingChoices(
                             delta=Delta(content=" World"), index=0, finish_reason=None

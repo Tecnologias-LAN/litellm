@@ -9,8 +9,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
-from litellm.proxy.hooks.responses_id_security import ResponsesIDSecurity
-from litellm.types.llms.openai import ResponsesAPIResponse
+from litellm.proxy.hooks.responses_id_security import (
+    ResponsesIDSecurity,
+    _is_responses_api_create_route,
+)
+from litellm.types.llms.openai import (
+    ResponseCompletedEvent,
+    ResponsesAPIResponse,
+    ResponsesAPIStreamEvents,
+)
 from litellm.types.utils import SpecialEnums
 
 
@@ -44,10 +51,8 @@ class TestIsEncryptedResponseId:
         """Test that a properly encrypted response ID is identified correctly"""
         # Patch at the module level where it's imported
         import litellm.proxy.hooks.responses_id_security as responses_module
-        
-        with patch.object(
-            responses_module, "decrypt_value_helper"
-        ) as mock_decrypt:
+
+        with patch.object(responses_module, "decrypt_value_helper") as mock_decrypt:
             mock_decrypt.return_value = f"{SpecialEnums.LITELM_MANAGED_FILE_ID_PREFIX.value}response_id:resp_123;user_id:user-456"
 
             result = responses_id_security._is_encrypted_response_id(
@@ -61,10 +66,8 @@ class TestIsEncryptedResponseId:
         """Test that an unencrypted response ID returns False"""
         # Patch at the module level where it's imported
         import litellm.proxy.hooks.responses_id_security as responses_module
-        
-        with patch.object(
-            responses_module, "decrypt_value_helper"
-        ) as mock_decrypt:
+
+        with patch.object(responses_module, "decrypt_value_helper") as mock_decrypt:
             mock_decrypt.return_value = None
 
             result = responses_id_security._is_encrypted_response_id("resp_plain_value")
@@ -79,10 +82,8 @@ class TestDecryptResponseId:
         """Test decrypting a valid encrypted response ID"""
         # Patch at the module level where it's imported
         import litellm.proxy.hooks.responses_id_security as responses_module
-        
-        with patch.object(
-            responses_module, "decrypt_value_helper"
-        ) as mock_decrypt:
+
+        with patch.object(responses_module, "decrypt_value_helper") as mock_decrypt:
             mock_decrypt.return_value = f"{SpecialEnums.LITELM_MANAGED_FILE_ID_PREFIX.value}response_id:resp_original_123;user_id:user-456;team_id:team-789"
 
             original_id, user_id, team_id = responses_id_security._decrypt_response_id(
@@ -97,10 +98,8 @@ class TestDecryptResponseId:
         """Test decrypting a non-encrypted response ID"""
         # Patch at the module level where it's imported
         import litellm.proxy.hooks.responses_id_security as responses_module
-        
-        with patch.object(
-            responses_module, "decrypt_value_helper"
-        ) as mock_decrypt:
+
+        with patch.object(responses_module, "decrypt_value_helper") as mock_decrypt:
             mock_decrypt.return_value = None
 
             original_id, user_id, team_id = responses_id_security._decrypt_response_id(
@@ -115,7 +114,9 @@ class TestDecryptResponseId:
 class TestEncryptResponseId:
     """Test _encrypt_response_id function"""
 
-    @pytest.mark.skip(reason="Flaky on CI; disabling temporarily until responses_id_security is fixed")
+    @pytest.mark.skip(
+        reason="Flaky on CI; disabling temporarily until responses_id_security is fixed"
+    )
     def test_encrypt_response_id_success(
         self, responses_id_security, mock_user_api_key_dict
     ):
@@ -128,7 +129,7 @@ class TestEncryptResponseId:
             "litellm.proxy.hooks.responses_id_security.encrypt_value_helper"
         ) as mock_encrypt:
             mock_encrypt.return_value = "encrypted_base64_value"
-            
+
             with patch.object(
                 responses_id_security, "_get_signing_key", return_value="test-key"
             ):
@@ -140,7 +141,9 @@ class TestEncryptResponseId:
                 assert result.id.startswith("resp_")
                 mock_encrypt.assert_called_once()
 
-    @pytest.mark.skip(reason="Flaky on CI; disabling temporarily until responses_id_security is fixed")
+    @pytest.mark.skip(
+        reason="Flaky on CI; disabling temporarily until responses_id_security is fixed"
+    )
     def test_encrypt_response_id_maintains_prefix(
         self, responses_id_security, mock_user_api_key_dict
     ):
@@ -151,7 +154,7 @@ class TestEncryptResponseId:
 
         with patch(
             "litellm.proxy.common_utils.encrypt_decrypt_utils._get_salt_key",
-            return_value="test-salt-key"
+            return_value="test-salt-key",
         ):
             with patch.object(
                 responses_id_security, "_get_signing_key", return_value="test-key"
@@ -523,6 +526,171 @@ class TestAsyncPreCallHook:
                     assert "team" in exc_info.value.detail.lower()
 
 
+    @pytest.mark.asyncio
+    async def test_async_pre_call_hook_alist_input_items_decrypts_response_id(
+        self, responses_id_security, mock_user_api_key_dict, mock_cache
+    ):
+        data = {"response_id": "resp_encrypted_789"}
+
+        with patch.object(
+            responses_id_security, "_is_encrypted_response_id", return_value=True
+        ):
+            with patch.object(
+                responses_id_security,
+                "_decrypt_response_id",
+                return_value=("resp_original_789", "test-user-123", "test-team-123"),
+            ):
+                result = await responses_id_security.async_pre_call_hook(
+                    user_api_key_dict=mock_user_api_key_dict,
+                    cache=mock_cache,
+                    data=data,
+                    call_type="alist_input_items",
+                )
+
+                assert result is not None
+                assert result["response_id"] == "resp_original_789"
+
+    @pytest.mark.asyncio
+    async def test_async_pre_call_hook_alist_input_items_team_security(
+        self, responses_id_security, mock_cache
+    ):
+        mock_auth_team_a = MagicMock()
+        mock_auth_team_a.user_id = None
+        mock_auth_team_a.team_id = "team-a"
+        mock_auth_team_a.user_role = None
+
+        data = {"response_id": "resp_encrypted_team_b"}
+
+        with patch.object(
+            responses_id_security, "_is_encrypted_response_id", return_value=True
+        ):
+            with patch.object(
+                responses_id_security,
+                "_decrypt_response_id",
+                return_value=("resp_original_team_b", None, "team-b"),
+            ):
+                with patch("litellm.proxy.proxy_server.general_settings", {}):
+                    with pytest.raises(HTTPException) as exc_info:
+                        await responses_id_security.async_pre_call_hook(
+                            user_api_key_dict=mock_auth_team_a,
+                            cache=mock_cache,
+                            data=data,
+                            call_type="alist_input_items",
+                        )
+
+                    assert exc_info.value.status_code == 403
+                    assert "team" in exc_info.value.detail.lower()
+
+
+class TestIsResponsesApiCreateRoute:
+    """Test the route gate that decides whether a streamed response id is encrypted."""
+
+    @pytest.mark.parametrize(
+        "route",
+        [
+            "/v1/responses",
+            "/responses",
+            "/openai/v1/responses",
+        ],
+    )
+    def test_create_routes_match(self, route):
+        assert _is_responses_api_create_route(route) is True
+
+    @pytest.mark.parametrize(
+        "route",
+        [
+            None,
+            "/chat/completions",
+            "/openai/v1/chat/completions",
+            "/v1/responses/{response_id}",
+            "/openai/v1/responses/{response_id}",
+            "/v1/responsesX",
+            "/responsesX",
+        ],
+    )
+    def test_non_create_routes_do_not_match(self, route):
+        assert _is_responses_api_create_route(route) is False
+
+
+class TestAsyncPostCallStreamingIteratorHook:
+    """Regression test for LIT-6167: streamed responses on /openai/v1/responses and
+    /responses must have their ids security-encrypted, not just on the exact
+    /v1/responses path. A streamed create emits ResponseCompletedEvent, whose
+    client-visible id lives on event.response.id, so the test drives that production
+    event shape (not a top-level id) and uses real encryption, asserting the id
+    round-trips back to the raw provider id plus the caller's user/team, which is the
+    access-control wrapper the aliases were leaking without."""
+
+    @staticmethod
+    async def _agen(chunks):
+        for chunk in chunks:
+            yield chunk
+
+    @staticmethod
+    def _completed_event(response_id):
+        return ResponseCompletedEvent(
+            type=ResponsesAPIStreamEvents.RESPONSE_COMPLETED,
+            response=ResponsesAPIResponse(
+                id=response_id,
+                created_at=0,
+                model="gpt-5.1",
+                object="response",
+                output=[],
+                parallel_tool_calls=False,
+                tool_choice="auto",
+                tools=[],
+            ),
+        )
+
+    async def _drain_streamed_id(self, responses_id_security, route, monkeypatch):
+        monkeypatch.setenv("LITELLM_SALT_KEY", "sk-test-salt-key-abcdefghij")
+        event = self._completed_event("resp_rawprovider123")
+
+        mock_auth = MagicMock()
+        mock_auth.user_id = "user-a"
+        mock_auth.team_id = "team-a"
+        mock_auth.request_route = route
+
+        collected = [
+            out
+            async for out in responses_id_security.async_post_call_streaming_iterator_hook(
+                user_api_key_dict=mock_auth,
+                response=self._agen([event]),
+                request_data={},
+            )
+        ]
+        return collected[0].response.id
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "route",
+        ["/v1/responses", "/responses", "/openai/v1/responses"],
+    )
+    async def test_streamed_id_encrypted_on_all_responses_routes(
+        self, responses_id_security, route, monkeypatch
+    ):
+        streamed_id = await self._drain_streamed_id(responses_id_security, route, monkeypatch)
+
+        assert streamed_id != "resp_rawprovider123"
+        assert responses_id_security._is_encrypted_response_id(streamed_id)
+        assert responses_id_security._decrypt_response_id(streamed_id) == (
+            "resp_rawprovider123",
+            "user-a",
+            "team-a",
+        )
+
+    @pytest.mark.asyncio
+    async def test_streamed_id_untouched_on_non_responses_route(
+        self, responses_id_security, monkeypatch
+    ):
+        streamed_id = await self._drain_streamed_id(
+            responses_id_security, "/chat/completions", monkeypatch
+        )
+
+        assert streamed_id == "resp_rawprovider123"
+        assert not responses_id_security._is_encrypted_response_id(streamed_id)
+
+
 class TestAsyncPostCallSuccessHook:
     """Test async_post_call_success_hook function"""
 
@@ -545,7 +713,9 @@ class TestAsyncPostCallSuccessHook:
                 response=mock_response,
             )
 
-            mock_encrypt.assert_called_once_with(mock_response, mock_user_api_key_dict)
+            mock_encrypt.assert_called_once_with(
+                mock_response, mock_user_api_key_dict, request_cache=None
+            )
             assert result == mock_response
 
     @pytest.mark.asyncio

@@ -3,7 +3,6 @@
 
 import asyncio
 import os
-import sys
 import traceback
 
 from dotenv import load_dotenv
@@ -14,11 +13,7 @@ from litellm.llms.anthropic.chat import ModelResponseIterator
 
 load_dotenv()
 import io
-import os
 
-sys.path.insert(
-    0, os.path.abspath("../..")
-)  # Adds the parent directory to the system path
 from typing import Optional
 from unittest.mock import MagicMock, patch
 
@@ -360,7 +355,6 @@ def test_process_anthropic_headers_with_no_matching_headers():
 )
 def test_anthropic_tool_use(tool_type, tool_config, message_content):
     """Test Anthropic tool use with computer use and web fetch tools."""
-    from litellm import completion
 
     litellm._turn_on_debug()
 
@@ -489,7 +483,7 @@ class TestAnthropicCompletion(BaseLLMChatTest, BaseAnthropicChatTest):
 
     def get_base_completion_call_args_with_thinking(self) -> dict:
         return {
-            "model": "anthropic/claude-3-7-sonnet-latest",
+            "model": "anthropic/claude-sonnet-4-5-20250929",
             "thinking": {"type": "enabled", "budget_tokens": 16000},
         }
 
@@ -701,7 +695,7 @@ def test_anthropic_tool_with_image():
     ]
 
     result = prompt_factory(
-        model="claude-3-5-sonnet-20240620",
+        model="claude-sonnet-4-5-20250929",
         messages=messages,
         custom_llm_provider="anthropic",
     )
@@ -761,7 +755,7 @@ def test_anthropic_map_openai_params_tools_and_json_schema():
     mapped_params = litellm.AnthropicConfig().map_openai_params(
         non_default_params=args["non_default_params"],
         optional_params={},
-        model="claude-3-5-sonnet-20240620",
+        model="claude-sonnet-4-5-20250929",
         drop_params=False,
     )
 
@@ -803,7 +797,7 @@ def test_anthropic_map_openai_params_tools_with_defs():
     mapped_params = litellm.AnthropicConfig().map_openai_params(
         non_default_params=args["non_default_params"],
         optional_params={},
-        model="claude-3-5-sonnet-20240620",
+        model="claude-sonnet-4-5-20250929",
         drop_params=False,
     )
 
@@ -870,7 +864,7 @@ from litellm.constants import RESPONSE_FORMAT_TOOL_NAME
 def test_anthropic_json_mode_and_tool_call_response(
     json_mode, tool_calls, expect_null_response
 ):
-    result = litellm.AnthropicConfig()._transform_response_for_json_mode(
+    result, _, _ = litellm.AnthropicConfig()._resolve_json_mode_non_streaming(
         json_mode=json_mode,
         tool_calls=tool_calls,
     )
@@ -951,7 +945,6 @@ def test_anthropic_citations_api():
     """
     Test the citations API
     """
-    from litellm import completion
 
     try:
         resp = completion(
@@ -997,7 +990,6 @@ def test_anthropic_citations_api():
 
 
 def test_anthropic_citations_api_streaming():
-    from litellm import completion
 
     resp = completion(
         model="claude-sonnet-4-5-20250929",
@@ -1039,12 +1031,11 @@ def test_anthropic_citations_api_streaming():
 @pytest.mark.parametrize(
     "model",
     [
-        "anthropic/claude-3-7-sonnet-20250219",
-        "bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+        "anthropic/claude-sonnet-4-5-20250929",
+        "bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0",
     ],
 )
 def test_anthropic_thinking_output(model):
-    from litellm import completion
 
     litellm._turn_on_debug()
 
@@ -1068,9 +1059,9 @@ def test_anthropic_thinking_output(model):
 @pytest.mark.parametrize(
     "model",
     [
-        "anthropic/claude-3-7-sonnet-20250219",
-        # "bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0",
-        # "bedrock/invoke/us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+        "anthropic/claude-sonnet-4-5-20250929",
+        # "bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        # "bedrock/invoke/us.anthropic.claude-sonnet-4-5-20250929-v1:0",
     ],
 )
 def test_anthropic_thinking_output_stream(model):
@@ -1111,7 +1102,6 @@ def test_anthropic_thinking_output_stream(model):
 
 
 def test_anthropic_custom_headers():
-    from litellm import completion
     from litellm.llms.custom_httpx.http_handler import HTTPHandler
 
     client = HTTPHandler()
@@ -1133,7 +1123,7 @@ def test_anthropic_custom_headers():
     with patch.object(client, "post") as mock_post:
         try:
             resp = completion(
-                model="claude-3-5-sonnet-20240620",
+                model="claude-sonnet-4-5-20250929",
                 headers={"anthropic-beta": "computer-use-2025-01-24"},
                 messages=[
                     {"role": "user", "content": "What is the capital of France?"}
@@ -1152,8 +1142,8 @@ def test_anthropic_custom_headers():
 @pytest.mark.parametrize(
     "model",
     [
-        "anthropic/claude-3-7-sonnet-20250219",
-        # "bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+        "anthropic/claude-sonnet-4-5-20250929",
+        # "bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0",
     ],
 )
 def test_anthropic_thinking_in_assistant_message(model):
@@ -1189,8 +1179,8 @@ def test_anthropic_thinking_in_assistant_message(model):
 @pytest.mark.parametrize(
     "model",
     [
-        "anthropic/claude-3-7-sonnet-20250219",
-        # "bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+        "anthropic/claude-sonnet-4-5-20250929",
+        # "bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0",
     ],
 )
 def test_anthropic_redacted_thinking_in_assistant_message(model):
@@ -1226,7 +1216,7 @@ def test_just_system_message():
     litellm._turn_on_debug()
     litellm.modify_params = True
     params = {
-        "model": "anthropic/claude-3-7-sonnet-20250219",
+        "model": "anthropic/claude-sonnet-4-5-20250929",
         "messages": [{"role": "system", "content": "You are a helpful assistant."}],
     }
 
@@ -1350,6 +1340,9 @@ def test_anthropic_text_editor():
 
 
 @pytest.mark.parametrize("spec", ["anthropic", "openai"])
+@pytest.mark.skipif(
+    os.getenv("ZAPIER_CI_CD_MCP_TOKEN") is None, reason="ZAPIER_CI_CD_MCP_TOKEN not set"
+)
 def test_anthropic_mcp_server_tool_use(spec: str):
     litellm._turn_on_debug()
 
@@ -1376,7 +1369,7 @@ def test_anthropic_mcp_server_tool_use(spec: str):
         ]
 
     params = {
-        "model": "anthropic/claude-sonnet-4-20250514",
+        "model": "anthropic/claude-sonnet-4-5-20250929",
         "messages": [{"role": "user", "content": "Who won the World Cup in 2022?"}],
         "tools": tools,
     }
@@ -1389,7 +1382,10 @@ def test_anthropic_mcp_server_tool_use(spec: str):
 
 
 @pytest.mark.parametrize(
-    "model", ["openai/gpt-4.1", "anthropic/claude-sonnet-4-20250514"]
+    "model", ["openai/gpt-4.1", "anthropic/claude-sonnet-4-5-20250929"]
+)
+@pytest.mark.skipif(
+    os.getenv("ZAPIER_CI_CD_MCP_TOKEN") is None, reason="ZAPIER_CI_CD_MCP_TOKEN not set"
 )
 def test_anthropic_mcp_server_responses_api(model: str):
     from litellm import responses
@@ -1500,8 +1496,8 @@ def test_anthropic_tool_cache_control():
         }
     ]
 
-    vertex_ai_model = "vertex_ai/claude-sonnet-4@20250514"
-    anthropic_api_model = "claude-sonnet-4-20250514"
+    vertex_ai_model = "vertex_ai/claude-sonnet-4-5@20250929"
+    anthropic_api_model = "claude-sonnet-4-5-20250929"
     result = return_raw_request(
         endpoint=CallTypes.completion,
         kwargs={
@@ -1522,7 +1518,6 @@ def test_anthropic_tool_cache_control():
 
 
 def test_anthropic_streaming():
-    from litellm import completion
 
     request_data = {
         "messages": [
@@ -1594,6 +1589,7 @@ def test_anthropic_via_responses_api():
         ResponsesAPIStreamEvents.RESPONSE_CREATED,
         ResponsesAPIStreamEvents.RESPONSE_IN_PROGRESS,
         ResponsesAPIStreamEvents.OUTPUT_ITEM_ADDED,
+        ResponsesAPIStreamEvents.CONTENT_PART_ADDED,
         ResponsesAPIStreamEvents.OUTPUT_TEXT_DELTA,  # Can occur multiple times
         ResponsesAPIStreamEvents.OUTPUT_TEXT_DONE,
         ResponsesAPIStreamEvents.CONTENT_PART_DONE,
@@ -1800,3 +1796,120 @@ def test_anthropic_structured_output_chat_completion_api():
     )
     assert response is not None
     print(f"response: {response}")
+
+
+def _make_transform_request(optional_params: dict, litellm_params: dict) -> dict:
+    from litellm.llms.anthropic.chat.transformation import AnthropicConfig
+
+    return AnthropicConfig().transform_request(
+        model="claude-3-5-sonnet-20241022",
+        messages=[{"role": "user", "content": "hi"}],
+        optional_params=optional_params,
+        litellm_params=litellm_params,
+        headers={},
+    )
+
+
+def test_metadata_only_user_id_passes_through():
+    """metadata with only user_id is forwarded as-is."""
+    data = _make_transform_request(
+        optional_params={"metadata": {"user_id": "abc123"}},
+        litellm_params={},
+    )
+    assert data.get("metadata") == {"user_id": "abc123"}
+
+
+def test_metadata_extra_keys_are_stripped():
+    """Extra keys in metadata are removed; only user_id is sent."""
+    data = _make_transform_request(
+        optional_params={"metadata": {"user_id": "abc123", "extra_key": "val"}},
+        litellm_params={},
+    )
+    assert data.get("metadata") == {"user_id": "abc123"}
+
+
+def test_metadata_without_user_id_is_dropped():
+    """metadata with no user_id is removed entirely."""
+    data = _make_transform_request(
+        optional_params={"metadata": {"only_other_key": "val"}},
+        litellm_params={},
+    )
+    assert "metadata" not in data
+
+
+def test_metadata_user_id_from_litellm_params_strips_extras():
+    """user_id from litellm_params metadata is extracted; extra keys are not forwarded."""
+    data = _make_transform_request(
+        optional_params={},
+        litellm_params={"metadata": {"user_id": "abc123", "trace_id": "xyz"}},
+    )
+    assert data.get("metadata") == {"user_id": "abc123"}
+
+
+def test_metadata_filter_applies_to_vertex_anthropic():
+    """VertexAIAnthropicConfig inherits the metadata filter."""
+    from litellm.llms.vertex_ai.vertex_ai_partner_models.anthropic.transformation import (
+        VertexAIAnthropicConfig,
+    )
+
+    data = VertexAIAnthropicConfig().transform_request(
+        model="claude-3-5-sonnet-20241022",
+        messages=[{"role": "user", "content": "hi"}],
+        optional_params={"metadata": {"user_id": "u1", "extra": "drop_me"}},
+        litellm_params={},
+        headers={},
+    )
+    assert data.get("metadata") == {"user_id": "u1"}
+
+
+def test_metadata_filter_applies_to_azure_anthropic():
+    """AzureAnthropicConfig inherits the metadata filter."""
+    from litellm.llms.azure_ai.anthropic.transformation import AzureAnthropicConfig
+
+    data = AzureAnthropicConfig().transform_request(
+        model="claude-3-5-sonnet-20241022",
+        messages=[{"role": "user", "content": "hi"}],
+        optional_params={"metadata": {"user_id": "u2", "extra": "drop_me"}},
+        litellm_params={},
+        headers={},
+    )
+    assert data.get("metadata") == {"user_id": "u2"}
+
+
+def test_anthropic_basic_completion_replay():
+    response = litellm.completion(
+        model="anthropic/claude-sonnet-4-5-20250929",
+        messages=[{"role": "user", "content": "Hello!"}],
+    )
+
+    assert response is not None
+    content = response.choices[0].message.content
+    assert isinstance(content, str) and content.strip(), content
+    assert response.usage.prompt_tokens > 0
+    assert response.usage.completion_tokens > 0
+    assert response.choices[0].finish_reason in {"stop", "length"}
+
+
+def test_anthropic_streaming_completion_replay():
+    stream = litellm.completion(
+        model="anthropic/claude-sonnet-4-5-20250929",
+        messages=[{"role": "user", "content": "Hello!"}],
+        stream=True,
+    )
+
+    collected_text = ""
+    finish_reason = None
+    chunk_count = 0
+    for chunk in stream:
+        chunk_count += 1
+        if not chunk.choices:
+            continue
+        delta = chunk.choices[0].delta
+        if delta and delta.content:
+            collected_text += delta.content
+        if chunk.choices[0].finish_reason:
+            finish_reason = chunk.choices[0].finish_reason
+
+    assert chunk_count > 1, "expected multiple SSE chunks from streaming response"
+    assert collected_text.strip(), collected_text
+    assert finish_reason in {"stop", "length"}

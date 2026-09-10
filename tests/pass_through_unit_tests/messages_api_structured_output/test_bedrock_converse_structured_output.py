@@ -7,10 +7,7 @@ by making actual API calls and validating JSON response format.
 Requires AWS credentials and Bedrock model access.
 """
 
-import os
-import sys
 
-sys.path.insert(0, os.path.abspath("../../../.."))
 
 from .base_anthropic_messages_structured_output_test import (
     BaseAnthropicMessagesStructuredOutputTest,
@@ -26,4 +23,4 @@ class TestBedrockConverseStructuredOutput(BaseAnthropicMessagesStructuredOutputT
     """
 
     def get_model(self) -> str:
-        return "bedrock/converse/us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+        return "bedrock/converse/us.anthropic.claude-haiku-4-5-20251001-v1:0"

@@ -1,13 +1,8 @@
 import json
-import os
-import sys
 
 import pytest
 from pydantic import BaseModel
 
-sys.path.insert(
-    0, os.path.abspath("../../..")
-)  # Adds the parent directory to the system path
 
 import litellm
 from litellm.types.llms.openai import (
@@ -113,7 +108,7 @@ class TestTextFormatConversion:
             captured_request["model"] = model
             captured_request["input"] = input
             captured_request["params"] = response_api_optional_request_params
-            
+
             # Return a mock ResponsesAPIResponse wrapped in a coroutine if async
             async def async_response():
                 return ResponsesAPIResponse(
@@ -132,7 +127,7 @@ class TestTextFormatConversion:
                     error=None,
                     incomplete_details=None,
                 )
-            
+
             if _is_async:
                 return async_response()
             else:
@@ -158,7 +153,6 @@ class TestTextFormatConversion:
             new=mock_handler,
         ):
             litellm._turn_on_debug()
-            litellm.set_verbose = True
 
             # Call aresponses with text_format parameter
             response = await litellm.aresponses(
@@ -168,7 +162,9 @@ class TestTextFormatConversion:
             )
 
             # Verify the captured request
-            print("Captured request:", json.dumps(captured_request, indent=4, default=str))
+            print(
+                "Captured request:", json.dumps(captured_request, indent=4, default=str)
+            )
 
             # Validate that text_format was converted to text parameter
             assert (

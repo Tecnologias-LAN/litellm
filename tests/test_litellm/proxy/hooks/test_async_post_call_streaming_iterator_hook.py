@@ -7,16 +7,11 @@ Verifies that the hook:
 3. Actually yields chunks from async generators
 """
 
-import os
-import sys
 from typing import AsyncGenerator, Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-sys.path.insert(
-    0, os.path.abspath("../../../..")
-)  # Adds the parent directory to the system path
 
 import litellm
 from litellm.integrations.custom_logger import CustomLogger
@@ -94,9 +89,7 @@ async def test_streaming_hook_is_async_generator():
         assert (
             len(collected_chunks) == 4
         ), f"Expected 4 chunks, got {len(collected_chunks)}"
-        assert (
-            callback.chunks_processed == 4
-        ), "Callback should have processed 4 chunks"
+        assert callback.chunks_processed == 4, "Callback should have processed 4 chunks"
 
 
 @pytest.mark.asyncio

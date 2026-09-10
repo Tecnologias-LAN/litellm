@@ -1,8 +1,6 @@
 import ast
 import os
-import sys
 
-sys.path.insert(0, os.path.abspath("../.."))
 
 import litellm
 
@@ -14,8 +12,15 @@ SEARCH_PROVIDERS = [
     "exa_ai",
     "brave",
     "firecrawl",
+    "fastcrw",
     "searxng",
     "linkup",
+    "duckduckgo",
+    "searchapi",
+    "serper",
+    "apiserpent",
+    "tinyfish",
+    "nimble",
 ]
 
 ALLOWED_FILES_IN_LLMS_FOLDER = [
@@ -25,7 +30,7 @@ ALLOWED_FILES_IN_LLMS_FOLDER = [
     "custom_httpx",
     "custom_llm",
     "deprecated_providers",
-    "pass_through"
+    "pass_through",
 ] + SEARCH_PROVIDERS
 
 
@@ -73,8 +78,8 @@ def run_lint_check(unique_names):
 
 
 def main():
-    llms_dir = "./litellm/llms/"  # Update this path if needed
-    # llms_dir = "../../litellm/llms/"  # LOCAL TESTING
+    # llms_dir = "./litellm/llms/"  # Update this path if needed
+    llms_dir = "litellm/litellm/llms"  # LOCAL TESTING
 
     unique_names = get_unique_names_from_llms_dir(llms_dir)
     print("Unique names in llms directory:", sorted(list(unique_names)))

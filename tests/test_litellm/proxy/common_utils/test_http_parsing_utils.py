@@ -1,21 +1,18 @@
 import json
-import os
-import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import orjson
 import pytest
 from fastapi import Request
 from fastapi.testclient import TestClient
+from starlette.datastructures import FormData
 
-sys.path.insert(
-    0, os.path.abspath("../../../..")
-)  # Adds the parent directory to the system path
 
 
 import litellm
 from litellm.proxy._types import ProxyException
 from litellm.proxy.common_utils.http_parsing_utils import (
+    _is_form_content_type,
     _read_request_body,
     _safe_get_request_headers,
     _safe_get_request_parsed_body,
@@ -72,9 +69,10 @@ async def test_form_data_parsing():
     test_data = {"name": "test_user", "message": "hello world"}
 
     # Mock the form method to return the test data as an awaitable
-    mock_request.form = AsyncMock(return_value=test_data)
+    mock_request.form = AsyncMock(return_value=FormData(test_data))
     mock_request.headers = {"content-type": "application/x-www-form-urlencoded"}
     mock_request.scope = {}
+    mock_request.state._cached_headers = None
 
     # Parse the form data
     result = await _read_request_body(mock_request)
@@ -98,31 +96,34 @@ async def test_form_data_parsing():
 async def test_form_data_with_json_metadata():
     """
     Test that form data with a JSON-encoded metadata field is correctly parsed.
-    
+
     When form data includes a 'metadata' field, it comes as a JSON string that needs
     to be parsed into a Python dictionary (lines 42-43 of http_parsing_utils.py).
     """
     # Create a mock request with form data containing JSON metadata
     mock_request = MagicMock()
-    
+
     # Metadata is sent as a JSON string in form data
-    metadata_json_string = json.dumps({
-        "user_id": "12345",
-        "request_type": "audio_transcription",
-        "tags": ["urgent", "production"],
-        "custom_field": {"nested": "value"}
-    })
-    
+    metadata_json_string = json.dumps(
+        {
+            "user_id": "12345",
+            "request_type": "audio_transcription",
+            "tags": ["urgent", "production"],
+            "custom_field": {"nested": "value"},
+        }
+    )
+
     test_data = {
         "model": "whisper-1",
         "file": "audio.mp3",
-        "metadata": metadata_json_string  # This is a JSON string, not a dict
+        "metadata": metadata_json_string,  # This is a JSON string, not a dict
     }
 
     # Mock the form method to return the test data as an awaitable
-    mock_request.form = AsyncMock(return_value=test_data)
+    mock_request.form = AsyncMock(return_value=FormData(test_data))
     mock_request.headers = {"content-type": "multipart/form-data"}
     mock_request.scope = {}
+    mock_request.state._cached_headers = None
 
     # Parse the form data
     result = await _read_request_body(mock_request)
@@ -134,11 +135,11 @@ async def test_form_data_with_json_metadata():
     assert result["metadata"]["request_type"] == "audio_transcription"
     assert result["metadata"]["tags"] == ["urgent", "production"]
     assert result["metadata"]["custom_field"] == {"nested": "value"}
-    
+
     # Verify other fields remain unchanged
     assert result["model"] == "whisper-1"
     assert result["file"] == "audio.mp3"
-    
+
     # Verify form() was called
     mock_request.form.assert_called_once()
 
@@ -147,22 +148,23 @@ async def test_form_data_with_json_metadata():
 async def test_form_data_with_invalid_json_metadata():
     """
     Test that form data with invalid JSON in metadata field raises an exception.
-    
+
     This tests error handling when the metadata field contains malformed JSON.
     """
     # Create a mock request with form data containing invalid JSON metadata
     mock_request = MagicMock()
-    
+
     test_data = {
         "model": "whisper-1",
         "file": "audio.mp3",
-        "metadata": '{"invalid": json}'  # Invalid JSON - unquoted value
+        "metadata": '{"invalid": json}',  # Invalid JSON - unquoted value
     }
 
     # Mock the form method to return the test data
-    mock_request.form = AsyncMock(return_value=test_data)
+    mock_request.form = AsyncMock(return_value=FormData(test_data))
     mock_request.headers = {"content-type": "multipart/form-data"}
     mock_request.scope = {}
+    mock_request.state._cached_headers = None
 
     # Should raise JSONDecodeError when trying to parse invalid JSON metadata
     with pytest.raises(json.JSONDecodeError):
@@ -173,22 +175,19 @@ async def test_form_data_with_invalid_json_metadata():
 async def test_form_data_without_metadata():
     """
     Test that form data without metadata field works correctly.
-    
+
     Ensures the metadata parsing logic doesn't break when metadata is absent.
     """
     # Create a mock request with form data without metadata
     mock_request = MagicMock()
-    
-    test_data = {
-        "model": "whisper-1",
-        "file": "audio.mp3",
-        "language": "en"
-    }
+
+    test_data = {"model": "whisper-1", "file": "audio.mp3", "language": "en"}
 
     # Mock the form method to return the test data
-    mock_request.form = AsyncMock(return_value=test_data)
+    mock_request.form = AsyncMock(return_value=FormData(test_data))
     mock_request.headers = {"content-type": "application/x-www-form-urlencoded"}
     mock_request.scope = {}
+    mock_request.state._cached_headers = None
 
     # Parse the form data
     result = await _read_request_body(mock_request)
@@ -208,17 +207,18 @@ async def test_form_data_with_empty_metadata():
     """
     # Create a mock request with form data containing empty metadata
     mock_request = MagicMock()
-    
+
     test_data = {
         "model": "whisper-1",
         "file": "audio.mp3",
-        "metadata": "{}"  # Empty JSON object as string
+        "metadata": "{}",  # Empty JSON object as string
     }
 
     # Mock the form method to return the test data
-    mock_request.form = AsyncMock(return_value=test_data)
+    mock_request.form = AsyncMock(return_value=FormData(test_data))
     mock_request.headers = {"content-type": "multipart/form-data"}
     mock_request.scope = {}
+    mock_request.state._cached_headers = None
 
     # Parse the form data
     result = await _read_request_body(mock_request)
@@ -234,28 +234,26 @@ async def test_form_data_with_empty_metadata():
 async def test_form_data_with_dict_metadata():
     """
     Test that form data with metadata already as a dict is not parsed again.
-    
+
     This handles edge cases where metadata might already be a dictionary
     (shouldn't happen in normal form data, but defensive coding).
     """
     # Create a mock request with form data where metadata is already a dict
     mock_request = MagicMock()
-    
-    metadata_dict = {
-        "user_id": "12345",
-        "tags": ["test"]
-    }
-    
+
+    metadata_dict = {"user_id": "12345", "tags": ["test"]}
+
     test_data = {
         "model": "whisper-1",
         "file": "audio.mp3",
-        "metadata": metadata_dict  # Already a dict, not a string
+        "metadata": metadata_dict,  # Already a dict, not a string
     }
 
     # Mock the form method to return the test data
-    mock_request.form = AsyncMock(return_value=test_data)
+    mock_request.form = AsyncMock(return_value=FormData(test_data))
     mock_request.headers = {"content-type": "multipart/form-data"}
     mock_request.scope = {}
+    mock_request.state._cached_headers = None
 
     # Parse the form data
     result = await _read_request_body(mock_request)
@@ -275,17 +273,18 @@ async def test_form_data_with_none_metadata():
     """
     # Create a mock request with form data where metadata is None
     mock_request = MagicMock()
-    
+
     test_data = {
         "model": "whisper-1",
         "file": "audio.mp3",
-        "metadata": None  # None value
+        "metadata": None,  # None value
     }
 
     # Mock the form method to return the test data
-    mock_request.form = AsyncMock(return_value=test_data)
+    mock_request.form = AsyncMock(return_value=FormData(test_data))
     mock_request.headers = {"content-type": "multipart/form-data"}
     mock_request.scope = {}
+    mock_request.state._cached_headers = None
 
     # Parse the form data
     result = await _read_request_body(mock_request)
@@ -366,7 +365,7 @@ async def test_json_parsing_error_handling():
     """
     # Test case 1: Trailing comma error
     mock_request = MagicMock()
-    invalid_json_with_trailing_comma = b'''{
+    invalid_json_with_trailing_comma = b"""{
         "model": "gpt-4o",
         "tools": [
             {
@@ -378,8 +377,8 @@ async def test_json_parsing_error_handling():
             }
         ],
         "input": "Run available tools"
-    }'''
-    
+    }"""
+
     mock_request.body = AsyncMock(return_value=invalid_json_with_trailing_comma)
     mock_request.headers = {"content-type": "application/json"}
     mock_request.scope = {}
@@ -387,14 +386,14 @@ async def test_json_parsing_error_handling():
     # Should raise ProxyException for trailing comma
     with pytest.raises(ProxyException) as exc_info:
         await _read_request_body(mock_request)
-    
+
     assert exc_info.value.code == "400"
     assert "Invalid JSON payload" in exc_info.value.message
     assert "trailing comma" in exc_info.value.message
 
     # Test case 2: Unquoted property name error
     mock_request2 = MagicMock()
-    invalid_json_unquoted_property = b'''{
+    invalid_json_unquoted_property = b"""{
         "model": "gpt-4o",
         "tools": [
             {
@@ -403,8 +402,8 @@ async def test_json_parsing_error_handling():
             }
         ],
         "input": "Run available tools"
-    }'''
-    
+    }"""
+
     mock_request2.body = AsyncMock(return_value=invalid_json_unquoted_property)
     mock_request2.headers = {"content-type": "application/json"}
     mock_request2.scope = {}
@@ -412,13 +411,13 @@ async def test_json_parsing_error_handling():
     # Should raise ProxyException for unquoted property
     with pytest.raises(ProxyException) as exc_info2:
         await _read_request_body(mock_request2)
-    
+
     assert exc_info2.value.code == "400"
     assert "Invalid JSON payload" in exc_info2.value.message
 
     # Test case 3: Valid JSON should work normally
     mock_request3 = MagicMock()
-    valid_json = b'''{
+    valid_json = b"""{
         "model": "gpt-4o",
         "tools": [
             {
@@ -430,8 +429,8 @@ async def test_json_parsing_error_handling():
             }
         ],
         "input": "Run available tools"
-    }'''
-    
+    }"""
+
     mock_request3.body = AsyncMock(return_value=valid_json)
     mock_request3.headers = {"content-type": "application/json"}
     mock_request3.scope = {}
@@ -444,36 +443,82 @@ async def test_json_parsing_error_handling():
     assert result["tools"][0]["type"] == "mcp"
 
 
+def _make_json_request(body: bytes) -> MagicMock:
+    mock_request = MagicMock()
+    mock_request.body = AsyncMock(return_value=body)
+    mock_request.headers = {"content-type": "application/json"}
+    mock_request.scope = {}
+    return mock_request
+
+
+@pytest.mark.asyncio
+async def test_surrogate_repair_skipped_above_size_limit(monkeypatch):
+    """
+    The surrogate-repair fallback runs two full-body re.sub passes that block the
+    event loop on multi-MB malformed bodies. Above MAX_REQUEST_BODY_SIZE_TO_REPAIR_MB
+    the repair must be skipped and the existing 400 raised immediately, while bodies
+    at or below the limit still get repaired.
+
+    `\\ud83d` is a lone high-surrogate escape: orjson rejects it, the json fallback
+    accepts it, so a body containing it is only salvaged when the repair path runs.
+    """
+    import litellm.proxy.common_utils.http_parsing_utils as http_parsing_utils
+
+    # Cap the repair at ~100 bytes so the test stays fast and independent of the default.
+    monkeypatch.setattr(
+        http_parsing_utils, "MAX_REQUEST_BODY_SIZE_TO_REPAIR_MB", 100 / (1024 * 1024)
+    )
+
+    small_body = b'{"model":"gpt-4o","x":"\\ud83d"}'
+    assert len(small_body) <= 100
+    repaired = await _read_request_body(_make_json_request(small_body))
+    assert repaired["model"] == "gpt-4o"
+
+    padding = "a" * 200
+    large_body = (
+        b'{"model":"gpt-4o","pad":"' + padding.encode() + b'","x":"\\ud83d"}'
+    )
+    assert len(large_body) > 100
+    with pytest.raises(ProxyException) as exc_info:
+        await _read_request_body(_make_json_request(large_body))
+    assert exc_info.value.code == "400"
+    assert "Invalid JSON payload" in exc_info.value.message
+
+    # Disabling the cap (0) restores repair for the same large body, proving the cap
+    # — not the malformed content — is what short-circuits the repair.
+    monkeypatch.setattr(
+        http_parsing_utils, "MAX_REQUEST_BODY_SIZE_TO_REPAIR_MB", 0
+    )
+    repaired_large = await _read_request_body(_make_json_request(large_body))
+    assert repaired_large["model"] == "gpt-4o"
+
+
 @pytest.mark.asyncio
 async def test_get_form_data():
     """
-    Test that get_form_data correctly handles form data with array notation.
-    Tests audio transcription parameters as a specific example.
+    A repeated `foo[]` key is how the OpenAI SDKs send a list, so every value has to
+    survive. `FormData`, not a dict: a dict cannot even hold the duplicate key.
     """
-    # Create a mock request with transcription form data
     mock_request = MagicMock()
+    mock_request.form = AsyncMock(
+        return_value=FormData(
+            [
+                ("file", "file_object"),
+                ("model", "gpt-4o-transcribe"),
+                ("include[]", "logprobs"),
+                ("language", "en"),
+                ("prompt", "Transcribe this audio file"),
+                ("response_format", "json"),
+                ("stream", "false"),
+                ("temperature", "0.2"),
+                ("timestamp_granularities[]", "word"),
+                ("timestamp_granularities[]", "segment"),
+            ]
+        )
+    )
 
-    # Create mock form data with array notation for timestamp_granularities
-    mock_form_data = {
-        "file": "file_object",  # In a real request this would be an UploadFile
-        "model": "gpt-4o-transcribe",
-        "include[]": "logprobs",  # Array notation
-        "language": "en",
-        "prompt": "Transcribe this audio file",
-        "response_format": "json",
-        "stream": "false",
-        "temperature": "0.2",
-        "timestamp_granularities[]": "word",  # First array item
-        "timestamp_granularities[]": "segment",  # Second array item (would overwrite in dict, but handled by the function)
-    }
-
-    # Mock the form method to return the test data
-    mock_request.form = AsyncMock(return_value=mock_form_data)
-
-    # Call the function being tested
     result = await get_form_data(mock_request)
 
-    # Verify regular form fields are preserved
     assert result["file"] == "file_object"
     assert result["model"] == "gpt-4o-transcribe"
     assert result["language"] == "en"
@@ -481,32 +526,18 @@ async def test_get_form_data():
     assert result["response_format"] == "json"
     assert result["stream"] == "false"
     assert result["temperature"] == "0.2"
-
-    # Verify array fields are correctly parsed
-    assert "include" in result
-    assert isinstance(result["include"], list)
-    assert "logprobs" in result["include"]
-
-    assert "timestamp_granularities" in result
-    assert isinstance(result["timestamp_granularities"], list)
-    # Note: In a real MultiDict, both values would be present
-    # But in our mock dictionary the second value overwrites the first
-    assert "segment" in result["timestamp_granularities"]
+    assert result["include"] == ["logprobs"]
+    assert result["timestamp_granularities"] == ["word", "segment"]
 
 
 def test_get_tags_from_request_body_with_metadata_tags():
     """
     Test that tags are correctly extracted from request body metadata.
     """
-    request_body = {
-        "model": "gpt-4",
-        "metadata": {
-            "tags": ["tag1", "tag2", "tag3"]
-        }
-    }
-    
+    request_body = {"model": "gpt-4", "metadata": {"tags": ["tag1", "tag2", "tag3"]}}
+
     result = get_tags_from_request_body(request_body=request_body)
-    
+
     assert result == ["tag1", "tag2", "tag3"]
 
 
@@ -516,13 +547,11 @@ def test_get_tags_from_request_body_with_litellm_metadata_tags():
     """
     request_body = {
         "model": "gpt-4",
-        "litellm_metadata": {
-            "tags": ["tag1", "tag2", "tag3"]
-        }
+        "litellm_metadata": {"tags": ["tag1", "tag2", "tag3"]},
     }
-    
+
     result = get_tags_from_request_body(request_body=request_body)
-    
+
     assert result == ["tag1", "tag2", "tag3"]
 
 
@@ -530,13 +559,10 @@ def test_get_tags_from_request_body_with_root_tags():
     """
     Test that tags are correctly extracted from root level of request body.
     """
-    request_body = {
-        "model": "gpt-4",
-        "tags": ["tag1", "tag2"]
-    }
-    
+    request_body = {"model": "gpt-4", "tags": ["tag1", "tag2"]}
+
     result = get_tags_from_request_body(request_body=request_body)
-    
+
     assert result == ["tag1", "tag2"]
 
 
@@ -546,14 +572,12 @@ def test_get_tags_from_request_body_with_combined_tags():
     """
     request_body = {
         "model": "gpt-4",
-        "metadata": {
-            "tags": ["tag1", "tag2"]
-        },
-        "tags": ["tag3", "tag4"]
+        "metadata": {"tags": ["tag1", "tag2"]},
+        "tags": ["tag3", "tag4"],
     }
-    
+
     result = get_tags_from_request_body(request_body=request_body)
-    
+
     assert result == ["tag1", "tag2", "tag3", "tag4"]
 
 
@@ -563,13 +587,11 @@ def test_get_tags_from_request_body_filters_non_strings():
     """
     request_body = {
         "model": "gpt-4",
-        "metadata": {
-            "tags": ["tag1", 123, "tag2", None, "tag3", {"nested": "dict"}]
-        }
+        "metadata": {"tags": ["tag1", 123, "tag2", None, "tag3", {"nested": "dict"}]},
     }
-    
+
     result = get_tags_from_request_body(request_body=request_body)
-    
+
     assert result == ["tag1", "tag2", "tag3"]
 
 
@@ -577,13 +599,10 @@ def test_get_tags_from_request_body_no_tags():
     """
     Test that empty list is returned when no tags are present.
     """
-    request_body = {
-        "model": "gpt-4",
-        "metadata": {}
-    }
-    
+    request_body = {"model": "gpt-4", "metadata": {}}
+
     result = get_tags_from_request_body(request_body=request_body)
-    
+
     assert result == []
 
 
@@ -594,18 +613,13 @@ def test_get_tags_from_request_body_with_dict_tags():
     """
     request_body = {
         "model": "aws/anthropic/bedrock-claude-3-5-sonnet-v1",
-        "messages": [
-            {
-                "role": "user",
-                "content": "aloha"
-            }
-        ],
+        "messages": [{"role": "user", "content": "aloha"}],
         "metadata": {
             "tags": {
                 "litellm_id": "litellm_ratelimit_test",
-                "llm_id": "llmid_ratelimit_test"
+                "llm_id": "llmid_ratelimit_test",
             }
-        }
+        },
     }
 
     result = get_tags_from_request_body(request_body=request_body)
@@ -624,7 +638,7 @@ def test_get_tags_from_request_body_with_null_metadata():
     """
     request_body = {
         "model": "gpt-4",
-        "metadata": None  # OpenAI API accepts metadata: null
+        "metadata": None,  # OpenAI API accepts metadata: null
     }
 
     result = get_tags_from_request_body(request_body=request_body)
@@ -641,10 +655,7 @@ def test_populate_request_with_path_params_adds_query_params():
     # Create a mock request with query parameters
     mock_request = MagicMock()
     # Mock query_params as a dict-like object that can be converted to dict
-    mock_request.query_params = {
-        "organization_id": "org-123",
-        "user_id": "user-456"
-    }
+    mock_request.query_params = {"organization_id": "org-123", "user_id": "user-456"}
     mock_request.path_params = {}
     # Mock url.path to avoid errors in _add_vector_store_id_from_path
     mock_request.url.path = "/v1/chat/completions"
@@ -652,7 +663,7 @@ def test_populate_request_with_path_params_adds_query_params():
     # Initial request data without query params
     request_data = {
         "model": "gpt-4",
-        "messages": [{"role": "user", "content": "Hello"}]
+        "messages": [{"role": "user", "content": "Hello"}],
     }
 
     # Call the function
@@ -676,7 +687,7 @@ def test_populate_request_with_path_params_does_not_overwrite_existing_values():
     # Mock query_params as a dict-like object that can be converted to dict
     mock_request.query_params = {
         "organization_id": "org-query-param",
-        "model": "gpt-3.5-turbo"
+        "model": "gpt-3.5-turbo",
     }
     mock_request.path_params = {}
     # Mock url.path to avoid errors in _add_vector_store_id_from_path
@@ -686,7 +697,7 @@ def test_populate_request_with_path_params_does_not_overwrite_existing_values():
     request_data = {
         "model": "gpt-4",  # This should NOT be overwritten
         "organization_id": "org-existing",  # This should NOT be overwritten
-        "messages": [{"role": "user", "content": "Hello"}]
+        "messages": [{"role": "user", "content": "Hello"}],
     }
 
     # Call the function
@@ -694,7 +705,9 @@ def test_populate_request_with_path_params_does_not_overwrite_existing_values():
 
     # Verify existing values were NOT overwritten
     assert result["model"] == "gpt-4"  # Should keep original, not "gpt-3.5-turbo"
-    assert result["organization_id"] == "org-existing"  # Should keep original, not "org-query-param"
+    assert (
+        result["organization_id"] == "org-existing"
+    )  # Should keep original, not "org-query-param"
     # Verify other data is preserved
     assert result["messages"] == [{"role": "user", "content": "Hello"}]
 
@@ -761,3 +774,258 @@ async def test_request_body_with_html_script_tags():
             f"Message content with HTML was modified during parsing: "
             f"expected={msg['content']!r}, got={result['messages'][2]['content']!r}"
         )
+
+
+def test_safe_get_request_headers_caches_on_request_state():
+    """
+    Test that _safe_get_request_headers caches the result on request.state
+    and returns the same object on subsequent calls.
+    """
+    mock_request = MagicMock()
+    mock_request.headers = {
+        "content-type": "application/json",
+        "authorization": "Bearer sk-123",
+    }
+    mock_request.state = MagicMock(spec=[])  # empty spec so getattr returns default
+
+    # First call — should create and cache
+    result1 = _safe_get_request_headers(mock_request)
+    assert result1 == {
+        "content-type": "application/json",
+        "authorization": "Bearer sk-123",
+    }
+    assert mock_request.state._cached_headers is result1
+
+    # Second call — should return the cached object (same identity)
+    result2 = _safe_get_request_headers(mock_request)
+    assert result2 is result1
+
+
+def test_safe_get_request_headers_none_request():
+    """
+    Test that _safe_get_request_headers returns empty dict for None request.
+    """
+    result = _safe_get_request_headers(None)
+    assert result == {}
+
+
+def test_safe_get_request_headers_copy_protects_cache():
+    """
+    Test that callers using .copy() before mutation do not corrupt the cache.
+    """
+    mock_request = MagicMock()
+    mock_request.headers = {"authorization": "Bearer sk-123", "host": "localhost"}
+    mock_request.state = MagicMock(spec=[])
+
+    original = _safe_get_request_headers(mock_request)
+
+    # Simulate what mutation call sites do: copy then pop
+    mutable = _safe_get_request_headers(mock_request).copy()
+    mutable.pop("authorization", None)
+
+    # Cache must be unaffected
+    assert "authorization" in _safe_get_request_headers(mock_request)
+    assert _safe_get_request_headers(mock_request) is original
+
+
+def test_safe_get_request_headers_state_unavailable():
+    """
+    Test that _safe_get_request_headers still returns headers when
+    request.state rejects attribute writes (the except path on the cache-write).
+    """
+
+    class ReadOnlyState:
+        """State object that allows reads but raises on writes."""
+
+        def __setattr__(self, name, value):
+            raise AttributeError("read-only state")
+
+        def __getattr__(self, name):
+            return None  # _cached_headers not found → triggers fresh read
+
+    mock_request = MagicMock()
+    mock_request.headers = {"content-type": "application/json"}
+    mock_request.state = ReadOnlyState()
+
+    result = _safe_get_request_headers(mock_request)
+    assert result == {"content-type": "application/json"}
+
+
+class TestGetTagsFromRequestBodyStringCoerce:
+    """Regression: the auth-time tag helper used `metadata.get("tags", ...)`
+    directly, which raised AttributeError when metadata arrived as a JSON
+    string (multipart/form-data or extra_body). That turned into a DoS at
+    auth time and potentially bypassed tag-based RBAC if the caller caught
+    the exception and fell through with empty tags.
+    """
+
+    def test_json_string_metadata_is_coerced_to_dict(self):
+        from litellm.proxy.common_utils.http_parsing_utils import (
+            get_tags_from_request_body,
+        )
+
+        metadata_json = json.dumps({"tags": ["a", "b"]})
+        # Must not raise
+        tags = get_tags_from_request_body({"metadata": metadata_json})
+        assert tags == ["a", "b"]
+
+    def test_unparseable_string_metadata_is_ignored(self):
+        from litellm.proxy.common_utils.http_parsing_utils import (
+            get_tags_from_request_body,
+        )
+
+        # Must not raise; must yield no metadata tags but keep root tags
+        tags = get_tags_from_request_body(
+            {"metadata": "not-json", "tags": ["root-only"]}
+        )
+        assert tags == ["root-only"]
+
+    def test_dict_metadata_still_works(self):
+        from litellm.proxy.common_utils.http_parsing_utils import (
+            get_tags_from_request_body,
+        )
+
+        tags = get_tags_from_request_body({"metadata": {"tags": ["x"]}})
+        assert tags == ["x"]
+
+
+class TestIsFormContentType:
+    @pytest.mark.parametrize(
+        "content_type",
+        [
+            "application/x-www-form-urlencoded",
+            "multipart/form-data",
+            "multipart/form-data; boundary=----WebKitFormBoundary",
+            "Application/X-WWW-Form-Urlencoded",
+            "  multipart/form-data  ",
+            "application/x-www-form-urlencoded; charset=utf-8",
+        ],
+    )
+    def test_form_types_match(self, content_type):
+        assert _is_form_content_type(content_type) is True
+
+    @pytest.mark.parametrize(
+        "content_type",
+        [
+            "",
+            "application/json",
+            "application/json; charset=utf-8",
+            "application/form-json",
+            "multiform/anything",
+            "application/json; xform=1",
+            "application/xml-with-form-data-but-not-actually",
+            "text/plain",
+            "form",
+        ],
+    )
+    def test_non_form_types_rejected(self, content_type):
+        assert _is_form_content_type(content_type) is False
+
+
+class TestReadRequestBodyNonCanonicalContentType:
+    """A JSON body with a ``"form"``-substring Content-Type must parse as JSON."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "content_type",
+        [
+            "application/form-json",
+            "application/json; xform=1",
+            "multiform/anything",
+        ],
+    )
+    async def test_json_body_with_formlike_content_type_parses_as_json(
+        self, content_type
+    ):
+        payload = {"user_config": {"model_list": []}, "model": "x"}
+
+        mock_request = MagicMock()
+        mock_request.body = AsyncMock(return_value=orjson.dumps(payload))
+        mock_request.form = AsyncMock(return_value=FormData({}))
+        mock_request.headers = {"content-type": content_type}
+        mock_request.scope = {}
+
+        result = await _read_request_body(mock_request)
+        assert result == payload
+        mock_request.form.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_real_form_post_still_parsed_as_form(self):
+        mock_request = MagicMock()
+        mock_request.form = AsyncMock(return_value=FormData({"k": "v"}))
+        mock_request.body = AsyncMock(return_value=b"")
+        mock_request.headers = {"content-type": "application/x-www-form-urlencoded"}
+        mock_request.scope = {}
+
+        result = await _read_request_body(mock_request)
+        assert result == {"k": "v"}
+        mock_request.form.assert_awaited_once()
+
+
+class TestReadRequestBodyFormParseFailure:
+    """
+    A failed ``request.form()`` parse (e.g. multipart with missing boundary)
+    must surface as a 400, not silently return ``{}`` — otherwise the
+    auth-time pre-read sees an empty body while a later raw-body re-read
+    sees the original payload, defeating every banned-param check.
+    """
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "raised_exception",
+        [
+            ValueError("Missing boundary in multipart."),
+            AssertionError("malformed chunk"),
+            RuntimeError("form parser exploded"),
+        ],
+    )
+    async def test_form_parse_failure_raises_400(self, raised_exception):
+        mock_request = MagicMock()
+        mock_request.form = AsyncMock(side_effect=raised_exception)
+        mock_request.headers = {"content-type": "multipart/form-data"}
+        mock_request.scope = {}
+
+        with pytest.raises(ProxyException) as exc_info:
+            await _read_request_body(mock_request)
+        assert str(exc_info.value.code) == "400"
+
+
+class TestGetRequestBody:
+    @pytest.mark.asyncio
+    async def test_json_with_charset_param_parses_as_json(self):
+        payload = {"k": "v"}
+        mock_request = MagicMock()
+        mock_request.method = "POST"
+        mock_request.body = AsyncMock(return_value=orjson.dumps(payload))
+        mock_request.headers = {"content-type": "application/json; charset=utf-8"}
+        mock_request.scope = {}
+
+        result = await get_request_body(mock_request)
+        assert result == payload
+
+    @pytest.mark.asyncio
+    async def test_form_post_routes_to_form_data(self):
+        mock_request = MagicMock()
+        mock_request.method = "POST"
+        mock_request.headers = {"content-type": "multipart/form-data; boundary=x"}
+        mock_request.form = AsyncMock(return_value=FormData({"k": "v"}))
+        mock_request.scope = {}
+
+        result = await get_request_body(mock_request)
+        assert result == {"k": "v"}
+
+    @pytest.mark.asyncio
+    async def test_substring_match_no_longer_accepted(self):
+        mock_request = MagicMock()
+        mock_request.method = "POST"
+        mock_request.headers = {"content-type": "application/form-json"}
+        mock_request.scope = {}
+
+        with pytest.raises(ValueError, match="Unsupported content type"):
+            await get_request_body(mock_request)
+
+    @pytest.mark.asyncio
+    async def test_non_post_returns_empty(self):
+        mock_request = MagicMock()
+        mock_request.method = "GET"
+        assert await get_request_body(mock_request) == {}

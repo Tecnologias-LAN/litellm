@@ -6,14 +6,10 @@ This test file verifies the fixes for Issue #19923:
 - thinking parameter is supported for reasoning-capable models
 - Model metadata correctly reflects capabilities
 """
-import os
-import sys
+
 
 import pytest
 
-sys.path.insert(
-    0, os.path.abspath("../../..")
-)  # Adds the parent directory to the system path
 
 from litellm.llms.minimax.chat.transformation import MinimaxChatConfig
 from litellm.llms.openrouter.chat.transformation import OpenrouterConfig
@@ -72,9 +68,7 @@ def test_minimax_supports_thinking_param():
     """MiniMax reasoning models should support thinking parameter."""
     config = MinimaxChatConfig()
 
-    supported_params = config.get_supported_openai_params(
-        model="minimax/MiniMax-M2.1"
-    )
+    supported_params = config.get_supported_openai_params(model="minimax/MiniMax-M2.1")
 
     # thinking should be in supported params for reasoning models
     assert "thinking" in supported_params

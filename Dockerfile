@@ -131,10 +131,12 @@ RUN sed -i 's/\r$//' docker/init-enterprise.sh && chmod +x docker/init-enterpris
 
 EXPOSE 4000/tcp
 
-RUN apk add --no-cache supervisor
-COPY docker/supervisord.conf /etc/supervisord.conf
+# NOTA: LiteLLM v1.100.x elimino docker/supervisord.conf del repo, por eso ya
+# no se instala supervisor ni se copia ese archivo (el build fallaria).
 
-# Enterprise mode enabled by default
+# Enterprise mode: habilitado de forma permanente en el codigo
+# (ENTERPRISE_ALWAYS_ON en litellm/proxy/auth/litellm_license.py).
+# Esta variable se mantiene solo por compatibilidad; ya no es necesaria.
 ENV LITELLM_MODE=PRODUCTION
 ENV LITELLM_FORCE_ENTERPRISE=true
 

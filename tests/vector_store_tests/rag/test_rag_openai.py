@@ -2,13 +2,10 @@
 OpenAI RAG ingestion tests.
 """
 
-import os
-import sys
 from typing import Any, Dict, Optional
 
 import pytest
 
-sys.path.insert(0, os.path.abspath("../../.."))
 
 import litellm
 from litellm.types.rag import RAGIngestOptions, OpenAIVectorStoreOptions
@@ -59,14 +56,14 @@ class TestRAGOpenAI(BaseRAGTest):
             ingest_options=self.get_base_ingest_options(),
             file_data=(filename, text_content, "text/plain"),
         )
-        
+
         # Check if ingestion succeeded
         if ingest_response["status"] != "completed":
             pytest.fail(
                 f"Ingestion failed with status: {ingest_response['status']}, "
                 f"error: {ingest_response.get('error', 'Unknown')}"
             )
-        
+
         vector_store_id = ingest_response["vector_store_id"]
         assert vector_store_id, "vector_store_id should not be empty"
 
@@ -87,9 +84,7 @@ class TestRAGOpenAI(BaseRAGTest):
         print(f"RAG Query Response: {response}")
 
         assert response.choices[0].message.content
-        assert (
-            "search_results" in response.choices[0].message.provider_specific_fields
-        )
+        assert "search_results" in response.choices[0].message.provider_specific_fields
 
     @pytest.mark.asyncio
     async def test_rag_query_with_rerank(self):
@@ -108,14 +103,14 @@ class TestRAGOpenAI(BaseRAGTest):
             ingest_options=self.get_base_ingest_options(),
             file_data=(filename, text_content, "text/plain"),
         )
-        
+
         # Check if ingestion succeeded
         if ingest_response["status"] != "completed":
             pytest.fail(
                 f"Ingestion failed with status: {ingest_response['status']}, "
                 f"error: {ingest_response.get('error', 'Unknown')}"
             )
-        
+
         vector_store_id = ingest_response["vector_store_id"]
         assert vector_store_id, "vector_store_id should not be empty"
 
@@ -141,11 +136,5 @@ class TestRAGOpenAI(BaseRAGTest):
         print(f"RAG Query Response with Rerank: {response.model_dump_json(indent=4)}")
 
         assert response.choices[0].message.content
-        assert (
-            "search_results" in response.choices[0].message.provider_specific_fields
-        )
-        assert (
-            "rerank_results" in response.choices[0].message.provider_specific_fields
-        )
-
-    
+        assert "search_results" in response.choices[0].message.provider_specific_fields
+        assert "rerank_results" in response.choices[0].message.provider_specific_fields

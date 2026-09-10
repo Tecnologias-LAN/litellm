@@ -1,18 +1,52 @@
-import os
+import importlib
+import importlib.util
+from importlib.machinery import PathFinder
+import time
+import site
 import sys
 
 import pytest
 import requests
-
-sys.path.insert(
-    0, os.path.abspath("../../..")
-)  # Adds the parent directory to the system path
-
-
-import responses
-
 from litellm.proxy.client.chat import ChatClient
 from litellm.proxy.client.exceptions import UnauthorizedError
+
+
+def _load_http_mocking_responses():
+    """Load the third-party `responses` package even if test collection creates
+    a top-level `responses` namespace package from `tests/test_litellm/responses`.
+    """
+    module = importlib.import_module("responses")
+    if hasattr(module, "activate"):
+        return module
+
+    for module_name in list(sys.modules):
+        if module_name == "responses" or module_name.startswith("responses."):
+            sys.modules.pop(module_name, None)
+
+    search_paths = []
+    try:
+        search_paths.extend(site.getsitepackages())
+    except AttributeError:
+        pass
+    user_site = site.getusersitepackages()
+    if isinstance(user_site, str):
+        search_paths.append(user_site)
+    else:
+        search_paths.extend(user_site)
+
+    spec = PathFinder.find_spec("responses", search_paths)
+    if spec is None or spec.loader is None:
+        raise ImportError("Unable to load the third-party `responses` package")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["responses"] = module
+    spec.loader.exec_module(module)
+
+    if not hasattr(module, "activate"):
+        raise ImportError("Unable to load the third-party `responses` package")
+    return module
+
+
+responses = _load_http_mocking_responses()
 
 
 @pytest.fixture
@@ -194,3 +228,31 @@ def test_completions_other_errors(client, sample_messages):
     with pytest.raises(requests.exceptions.HTTPError) as exc_info:
         client.completions(model="gpt-4", messages=sample_messages)
     assert exc_info.value.response.status_code == 500
+
+
+def test_completions_gives_up_at_the_timeout_instead_of_hanging(hanging_server):
+    """
+    A proxy that accepts the connection but never answers used to pin the caller's
+    process forever, since the request carried no timeout at all.
+    """
+    client = ChatClient(base_url=hanging_server, api_key="sk-test", timeout=1)
+
+    started = time.monotonic()
+    with pytest.raises(requests.exceptions.Timeout):
+        client.completions(model="gpt-5.4", messages=[{"role": "user", "content": "hi"}])
+
+    assert time.monotonic() - started < 10
+
+
+def test_completions_stream_gives_up_at_the_timeout_instead_of_hanging(hanging_server):
+    """
+    The streaming call opens the response before reading chunks, so a proxy that never
+    sends its headers used to hang here forever too.
+    """
+    client = ChatClient(base_url=hanging_server, api_key="sk-test", timeout=1)
+
+    started = time.monotonic()
+    with pytest.raises(requests.exceptions.Timeout):
+        next(client.completions_stream(model="gpt-5.4", messages=[{"role": "user", "content": "hi"}]))
+
+    assert time.monotonic() - started < 10

@@ -2,14 +2,10 @@ import asyncio
 import httpx
 import json
 import pytest
-import sys
 from typing import Any, Dict, List
 from unittest.mock import MagicMock, Mock, patch
 import os
 
-sys.path.insert(
-    0, os.path.abspath("../..")
-)  # Adds the parent directory to the system path
 import litellm
 from litellm.exceptions import BadRequestError
 from litellm.llms.custom_httpx.http_handler import AsyncHTTPHandler, HTTPHandler
@@ -113,7 +109,7 @@ class BaseLLMRerankTest(ABC):
             assert response.results is not None
 
             assert response._hidden_params["response_cost"] is not None
-            
+
             # Check expected cost
             expected_cost = self.get_expected_cost()
             if expected_cost is not None:

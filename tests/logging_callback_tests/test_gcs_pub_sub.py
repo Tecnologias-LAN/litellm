@@ -1,9 +1,7 @@
 import io
 import os
-import sys
 
 
-sys.path.insert(0, os.path.abspath("../.."))
 
 import asyncio
 import litellm
@@ -15,7 +13,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-import litellm
 from litellm import completion
 from litellm._logging import verbose_logger
 from litellm.integrations.gcs_pubsub.pub_sub import *
@@ -31,16 +28,20 @@ verbose_logger.setLevel(logging.DEBUG)
 
 ignored_keys = [
     "request_id",
+    "metadata.litellm_call_id",
     "session_id",
     "startTime",
     "endTime",
     "completionStartTime",
     "endTime",
+    "request_duration_ms",
     "metadata.model_map_information",
     "metadata.usage_object",
     "metadata.cold_storage_object_key",
     "metadata.litellm_overhead_time_ms",
     "metadata.cost_breakdown",
+    "metadata.autorouter_savings",
+    "metadata.eval_information",
 ]
 
 
@@ -130,7 +131,8 @@ def assert_gcs_pubsub_request_matches_expected(
         actual_request_body, expected_request_body, ignore_keys=ignored_keys
     )
     if differences:
-        assert False, f"Dictionary mismatch: {differences}"
+        pytest.fail(f"Dictionary mismatch: {differences}")
+
 
 def assert_gcs_pubsub_request_matches_expected_standard_logging_payload(
     actual_request_body: dict,
@@ -174,7 +176,7 @@ def assert_gcs_pubsub_request_matches_expected_standard_logging_payload(
         "response_time",
         "completion_tokens",
         "prompt_tokens",
-        "total_tokens"
+        "total_tokens",
     ]
 
     for field in FIELDS_EXISTENCE_CHECKS:
@@ -189,7 +191,9 @@ async def test_async_gcs_pub_sub():
     mock_post.return_value.text = "Accepted"
 
     # Initialize the GcsPubSubLogger and set the mock
-    gcs_pub_sub_logger = GcsPubSubLogger(flush_interval=1)
+    gcs_pub_sub_logger = GcsPubSubLogger(
+        project_id="STUBBED_PROJECT_ID", topic_id="STUBBED_TOPIC_ID", flush_interval=1
+    )
     gcs_pub_sub_logger.async_httpx_client.post = mock_post
 
     mock_construct_request_headers = AsyncMock()
@@ -214,7 +218,7 @@ async def test_async_gcs_pub_sub():
     print("sent to url", actual_url)
     assert (
         actual_url
-        == "https://pubsub.googleapis.com/v1/projects/reliableKeys/topics/litellmDB:publish"
+        == "https://pubsub.googleapis.com/v1/projects/STUBBED_PROJECT_ID/topics/STUBBED_TOPIC_ID:publish"
     )
     actual_request = mock_post.call_args[1]["json"]
 
@@ -244,7 +248,9 @@ async def test_async_gcs_pub_sub_v1():
     mock_post.return_value.text = "Accepted"
 
     # Initialize the GcsPubSubLogger and set the mock
-    gcs_pub_sub_logger = GcsPubSubLogger(flush_interval=1)
+    gcs_pub_sub_logger = GcsPubSubLogger(
+        project_id="STUBBED_PROJECT_ID", topic_id="STUBBED_TOPIC_ID", flush_interval=1
+    )
     gcs_pub_sub_logger.async_httpx_client.post = mock_post
 
     mock_construct_request_headers = AsyncMock()
@@ -269,7 +275,7 @@ async def test_async_gcs_pub_sub_v1():
     print("sent to url", actual_url)
     assert (
         actual_url
-        == "https://pubsub.googleapis.com/v1/projects/reliableKeys/topics/litellmDB:publish"
+        == "https://pubsub.googleapis.com/v1/projects/STUBBED_PROJECT_ID/topics/STUBBED_TOPIC_ID:publish"
     )
     actual_request = mock_post.call_args[1]["json"]
 

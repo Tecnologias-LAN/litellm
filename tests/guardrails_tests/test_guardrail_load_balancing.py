@@ -2,11 +2,8 @@
 Test guardrail load balancing through the Router and ProxyLogging.
 """
 
-import os
-import sys
 from unittest.mock import MagicMock, patch, AsyncMock
 
-sys.path.insert(0, os.path.abspath("../.."))
 
 import litellm
 import pytest
@@ -65,8 +62,8 @@ async def test_proxy_logging_pre_call_hook_load_balancing():
     router = Router(
         model_list=[
             {
-                "model_name": "gpt-4",
-                "litellm_params": {"model": "gpt-4", "api_key": "fake-key"},
+                "model_name": "gpt-5.5",
+                "litellm_params": {"model": "gpt-5.5", "api_key": "fake-key"},
             }
         ],
         guardrail_list=guardrail_list,
@@ -99,7 +96,9 @@ async def test_proxy_logging_pre_call_hook_load_balancing():
 
             # Verify reasonable distribution (not all to one)
             min_calls = min(guardrail_1.calls, guardrail_2.calls)
-            assert min_calls >= 10, f"Expected at least 10 calls to each guardrail, got min={min_calls}"
+            assert (
+                min_calls >= 10
+            ), f"Expected at least 10 calls to each guardrail, got min={min_calls}"
 
     finally:
         litellm.callbacks = original_callbacks

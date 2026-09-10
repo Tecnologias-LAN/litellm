@@ -1,6 +1,5 @@
 import json
 import os
-import sys
 from unittest import mock
 
 from dotenv import load_dotenv
@@ -8,11 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 import asyncio
 import io
-import os
 
-sys.path.insert(
-    0, os.path.abspath("../..")
-)  # Adds the parent directory to the system path
 import openai
 import pytest
 from fastapi import Response
@@ -30,7 +25,8 @@ from litellm.proxy.proxy_server import (  # Replace with the actual module where
 def client():
     filepath = os.path.dirname(os.path.abspath(__file__))
     config_fp = f"{filepath}/test_configs/test_guardrails_config.yaml"
-    asyncio.run(initialize(config=config_fp))
+    with mock.patch("litellm.proxy.proxy_server.premium_user", True):
+        asyncio.run(initialize(config=config_fp))
     from litellm.proxy.proxy_server import app
 
     return TestClient(app)

@@ -3,14 +3,10 @@
 # There are 2 types of tests - changing config dynamically or by setting class variables
 
 import os
-import sys
 import traceback
 import json
 import pytest
 
-sys.path.insert(
-    0, os.path.abspath("../..")
-)  # Adds the parent directory to the system path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import litellm
@@ -600,7 +596,7 @@ def bedrock_test_completion():
     try:
         # OVERRIDE WITH DYNAMIC MAX TOKENS
         response_1 = litellm.completion(
-            model="bedrock/cohere.command-text-v14",
+            model="bedrock/cohere.command-r-v1:0",
             messages=[
                 {
                     "content": "Hello, how are you? Be as verbose as possible",
@@ -614,7 +610,7 @@ def bedrock_test_completion():
 
         # USE CONFIG TOKENS
         response_2 = litellm.completion(
-            model="bedrock/cohere.command-text-v14",
+            model="bedrock/cohere.command-r-v1:0",
             messages=[
                 {
                     "content": "Hello, how are you? Be as verbose as possible",

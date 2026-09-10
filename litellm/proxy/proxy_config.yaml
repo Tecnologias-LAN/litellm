@@ -34,51 +34,6 @@ model_list:
       model: "bedrock/us.amazon.nova-premier-v1:0"
       aws_region_name: "us-east-1"
 
-  - model_name: zai-glm-4.7
-    litellm_params:
-      model: zai/glm-4.7
-      api_key: os.environ/ZAI_API_KEY
-
-  - model_name: zai-glm-4.6
-    litellm_params:
-      model: zai/glm-4.6
-      api_key: os.environ/ZAI_API_KEY
-
-  - model_name: zai-glm-4.5
-    litellm_params:
-      model: zai/glm-4.5
-      api_key: os.environ/ZAI_API_KEY
-
-  - model_name: zai-glm-4.5v
-    litellm_params:
-      model: zai/glm-4.5v
-      api_key: os.environ/ZAI_API_KEY
-
-  - model_name: zai-glm-4.5-x
-    litellm_params:
-      model: zai/glm-4.5-x
-      api_key: os.environ/ZAI_API_KEY
-
-  - model_name: zai-glm-4.5-air
-    litellm_params:
-      model: zai/glm-4.5-air
-      api_key: os.environ/ZAI_API_KEY
-
-  - model_name: zai-glm-4.5-airx
-    litellm_params:
-      model: zai/glm-4.5-airx
-      api_key: os.environ/ZAI_API_KEY
-
-  - model_name: zai-glm-4-32b-0414-128k
-    litellm_params:
-      model: zai/glm-4-32b-0414-128k
-      api_key: os.environ/ZAI_API_KEY
-
-  - model_name: zai-glm-4.5-flash
-    litellm_params:
-      model: zai/glm-4.5-flash
-      api_key: os.environ/ZAI_API_KEY
-
 # MCP Server Configuration
 mcp_servers:
   # Wikipedia MCP - reliable and works without external deps

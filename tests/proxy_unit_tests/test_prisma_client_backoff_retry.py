@@ -11,15 +11,27 @@ import time
 from unittest.mock import AsyncMock, MagicMock, patch, call
 from unittest.mock import Mock
 import sys
-import os
 
 # Add project root to path
-sys.path.insert(0, os.path.abspath("../.."))
 
 from litellm.proxy.utils import PrismaClient, ProxyLogging
 from prisma.errors import PrismaError, ClientNotConnectedError
 import httpx
 import backoff
+
+
+@pytest.fixture(autouse=True)
+def mock_prisma_binary():
+    """Mock prisma.Prisma to avoid requiring 'prisma generate' in CI.
+
+    PrismaClient.__init__ does `from prisma import Prisma` inline, which raises
+    RuntimeError when the Prisma client hasn't been generated yet.  Replacing
+    sys.modules['prisma'] with a MagicMock lets the import succeed so tests can
+    instantiate a real PrismaClient and override client.db with their own mocks.
+    """
+    mock_module = MagicMock()
+    with patch.dict(sys.modules, {"prisma": mock_module}):
+        yield
 
 
 @pytest.fixture

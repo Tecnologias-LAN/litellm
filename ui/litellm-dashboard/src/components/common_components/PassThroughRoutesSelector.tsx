@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { Select } from "antd";
+import { MultiSelect, type MultiSelectOption } from "@/components/shared/MultiSelect";
 import { getPassThroughEndpointsCall } from "../networking";
 
 interface PassThroughRoutesSelectorProps {
-  onChange: (selectedRoutes: string[]) => void;
+  onChange?: (selectedRoutes: string[]) => void;
   value?: string[];
   className?: string;
   accessToken: string;
@@ -11,6 +11,16 @@ interface PassThroughRoutesSelectorProps {
   disabled?: boolean;
   teamId?: string | null;
 }
+
+interface PassThroughEndpoint {
+  path: string;
+  methods?: string[];
+}
+
+const routeOption = (endpoint: PassThroughEndpoint): MultiSelectOption => ({
+  label: endpoint.methods?.length ? `${endpoint.methods.join(", ")} ${endpoint.path}` : endpoint.path,
+  value: endpoint.path,
+});
 
 const PassThroughRoutesSelector: React.FC<PassThroughRoutesSelectorProps> = ({
   onChange,
@@ -21,7 +31,7 @@ const PassThroughRoutesSelector: React.FC<PassThroughRoutesSelectorProps> = ({
   disabled = false,
   teamId,
 }) => {
-  const [passThroughRoutes, setPassThroughRoutes] = useState<string[]>([]);
+  const [passThroughRoutes, setPassThroughRoutes] = useState<MultiSelectOption[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -32,8 +42,7 @@ const PassThroughRoutesSelector: React.FC<PassThroughRoutesSelectorProps> = ({
       try {
         const response = await getPassThroughEndpointsCall(accessToken, teamId);
         if (response.endpoints) {
-          const routes = response.endpoints.map((route: { path: string }) => route.path);
-          setPassThroughRoutes(routes);
+          setPassThroughRoutes(response.endpoints.map(routeOption));
         }
       } catch (error) {
         console.error("Error fetching pass through routes:", error);
@@ -46,25 +55,18 @@ const PassThroughRoutesSelector: React.FC<PassThroughRoutesSelectorProps> = ({
   }, [accessToken, teamId]);
 
   return (
-    <Select
-      mode="tags"
-      placeholder={placeholder}
-      onChange={onChange}
+    <MultiSelect
+      options={passThroughRoutes}
       value={value}
+      onValueChange={(routes) => onChange?.(routes)}
+      placeholder={placeholder}
+      emptyText="No pass through routes found"
       loading={loading}
-      className={className}
-      allowClear
-      options={passThroughRoutes.map((route) => ({
-        label: route,
-        value: route,
-      }))}
-      optionFilterProp="label"
-      showSearch
-      style={{ width: "100%" }}
+      allowCustomValues
       disabled={disabled}
+      className={className}
     />
   );
 };
 
 export default PassThroughRoutesSelector;
-

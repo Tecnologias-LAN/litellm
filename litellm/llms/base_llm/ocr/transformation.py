@@ -1,7 +1,9 @@
 """
 Base OCR transformation configuration.
 """
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Final, Literal
 
 import httpx
 from pydantic import PrivateAttr
@@ -15,40 +17,67 @@ else:
     LiteLLMLoggingObj = Any
 
 
-# DocumentType for OCR - Mistral format document dict
-DocumentType = Dict[str, str]
+# DocumentType for OCR - providers always receive a dict with
+# type="document_url" or type="image_url" (str values only).
+# File-type inputs are preprocessed to this format in litellm/ocr/main.py.
+DocumentType = dict[str, str]
+
+OCRRequestFormat = Literal["litellm", "native"]
+
+OCR_REQUEST_FORMATS: Final[tuple[OCRRequestFormat, ...]] = ("litellm", "native")
+
+OCR_REQUEST_FORMAT_PARAM: Final = "req_format"
+
+OCR_REQUEST_FORMAT_HEADER: Final = "x-req-format"
+
+PROVIDER_NATIVE_RESPONSE_KEY: Final = "provider_native_response"
+
+
+def parse_ocr_request_format(value: object) -> OCRRequestFormat:
+    if value == "litellm":
+        return "litellm"
+    if value == "native":
+        return "native"
+    raise ValueError(
+        f"Invalid `{OCR_REQUEST_FORMAT_PARAM}`: {value!r}. Expected one of {', '.join(OCR_REQUEST_FORMATS)}."
+    )
 
 
 class OCRPageDimensions(LiteLLMPydanticObjectBase):
     """Page dimensions from OCR response."""
-    dpi: Optional[int] = None
-    height: Optional[int] = None
-    width: Optional[int] = None
+
+    dpi: int | None = None
+    height: int | None = None
+    width: int | None = None
 
 
 class OCRPageImage(LiteLLMPydanticObjectBase):
     """Image extracted from OCR page."""
-    image_base64: Optional[str] = None
-    bbox: Optional[Dict[str, Any]] = None
-    
+
+    image_base64: str | None = None
+    bbox: dict[str, Any] | None = None
+
     model_config = {"extra": "allow"}
 
 
 class OCRPage(LiteLLMPydanticObjectBase):
     """Single page from OCR response."""
+
     index: int
     markdown: str
-    images: Optional[List[OCRPageImage]] = None
-    dimensions: Optional[OCRPageDimensions] = None
-    
+    images: list[OCRPageImage] | None = None
+    dimensions: OCRPageDimensions | None = None
+
     model_config = {"extra": "allow"}
 
 
 class OCRUsageInfo(LiteLLMPydanticObjectBase):
     """Usage information from OCR response."""
-    pages_processed: Optional[int] = None
-    doc_size_bytes: Optional[int] = None
-    
+
+    pages_processed: int | None = None
+    credits: float | None = None
+    doc_size_bytes: int | None = None
+
     model_config = {"extra": "allow"}
 
 
@@ -57,22 +86,36 @@ class OCRResponse(LiteLLMPydanticObjectBase):
     Standard OCR response format.
     Standardized to Mistral OCR format - other providers should transform to this format.
     """
-    pages: List[OCRPage]
+
+    pages: list[OCRPage]
     model: str
-    document_annotation: Optional[Any] = None
-    usage_info: Optional[OCRUsageInfo] = None
+    document_annotation: Any | None = None
+    usage_info: OCRUsageInfo | None = None
+    content: str | None = None
+    tables: list[dict[str, object]] | None = None
+    keyValuePairs: list[dict[str, object]] | None = None
     object: str = "ocr"
-    
+
     model_config = {"extra": "allow"}
 
     # Define private attributes using PrivateAttr
     _hidden_params: dict = PrivateAttr(default_factory=dict)
 
+    def set_provider_native_response(self, native_response: Mapping[str, object]) -> None:
+        """Keep the provider's own response payload alongside the normalized one."""
+        self._hidden_params[PROVIDER_NATIVE_RESPONSE_KEY] = native_response
+
+    def get_provider_native_response(self) -> Mapping[str, object] | None:
+        """The provider's own response payload, when `req_format=native` was requested."""
+        native_response: Final = self._hidden_params.get(PROVIDER_NATIVE_RESPONSE_KEY)
+        return native_response if isinstance(native_response, dict) else None
+
 
 class OCRRequestData(LiteLLMPydanticObjectBase):
     """OCR request data structure."""
-    data: Optional[Union[Dict, bytes]] = None
-    files: Optional[Dict[str, Any]] = None
+
+    data: dict | bytes | None = None
+    files: dict[str, Any] | None = None
 
 
 class BaseOCRConfig:
@@ -91,6 +134,12 @@ class BaseOCRConfig:
         """
         return []
 
+    def get_api_key_env_var(self) -> str | None:
+        """
+        Return the provider-specific API key environment variable name, if any.
+        """
+        return None
+
     def map_ocr_params(
         self,
         non_default_params: dict,
@@ -102,13 +151,13 @@ class BaseOCRConfig:
 
     def validate_environment(
         self,
-        headers: Dict,
+        headers: dict,
         model: str,
-        api_key: Optional[str] = None,
-        api_base: Optional[str] = None,
-        litellm_params: Optional[dict] = None,
+        api_key: str | None = None,
+        api_base: str | None = None,
+        litellm_params: dict | None = None,
         **kwargs,
-    ) -> Dict:
+    ) -> dict:
         """
         Validate environment and return headers.
         Override in provider-specific implementations.
@@ -117,10 +166,10 @@ class BaseOCRConfig:
 
     def get_complete_url(
         self,
-        api_base: Optional[str],
+        api_base: str | None,
         model: str,
         optional_params: dict,
-        litellm_params: Optional[dict] = None,
+        litellm_params: dict | None = None,
         **kwargs,
     ) -> str:
         """
@@ -140,13 +189,17 @@ class BaseOCRConfig:
         """
         Transform OCR request to provider-specific format.
         Override in provider-specific implementations.
-        
+
+        Note: By the time this method is called, any file-type documents have already
+        been converted to document_url/image_url format with base64 data URIs by
+        the preprocessing in litellm/ocr/main.py.
+
         Args:
             model: Model name
-            document: Document to process (Mistral format dict, or file path, bytes, etc.)
+            document: Document to process - always a dict with type="document_url" or type="image_url"
             optional_params: Optional parameters for the request
             headers: Request headers
-            
+
         Returns:
             OCRRequestData with data and files fields
         """
@@ -164,15 +217,15 @@ class BaseOCRConfig:
         Async transform OCR request to provider-specific format.
         Optional method - providers can override if they need async transformations
         (e.g., Azure AI for URL-to-base64 conversion).
-        
+
         Default implementation falls back to sync transform_ocr_request.
-        
+
         Args:
             model: Model name
             document: Document to process (Mistral format dict, or file path, bytes, etc.)
             optional_params: Optional parameters for the request
             headers: Request headers
-            
+
         Returns:
             OCRRequestData with data and files fields
         """
@@ -209,14 +262,14 @@ class BaseOCRConfig:
         Async transform provider-specific OCR response to standard format.
         Optional method - providers can override if they need async transformations
         (e.g., Azure Document Intelligence for async operation polling).
-        
+
         Default implementation falls back to sync transform_ocr_response.
-        
+
         Args:
             model: Model name
             raw_response: Raw HTTP response
             logging_obj: Logging object
-            
+
         Returns:
             OCRResponse in standard format
         """
@@ -240,4 +293,3 @@ class BaseOCRConfig:
             message=error_message,
             headers=headers,
         )
-

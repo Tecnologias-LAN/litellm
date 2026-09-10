@@ -187,7 +187,9 @@ class TestVoyageRerankTransform:
         )
 
         assert len(result.results) == 2
-        assert result.results[0]["document"]["text"] == "Paris is the capital of France."
+        assert (
+            result.results[0]["document"]["text"] == "Paris is the capital of France."
+        )
         assert result.results[1]["document"]["text"] == "France is a country in Europe."
 
     def test_transform_rerank_response_missing_data(self):
@@ -225,7 +227,7 @@ class TestVoyageRerankTransform:
         mock_logging = MagicMock()
         model_response = RerankResponse()
 
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(Exception, match='Unauthorized') as exc_info:
             self.config.transform_rerank_response(
                 model=self.model,
                 raw_response=mock_response,
@@ -246,7 +248,7 @@ class TestVoyageRerankTransform:
         mock_logging = MagicMock()
         model_response = RerankResponse()
 
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(Exception, match='Failed to parse response: Invalid JSON response') as exc_info:
             self.config.transform_rerank_response(
                 model=self.model,
                 raw_response=mock_response,

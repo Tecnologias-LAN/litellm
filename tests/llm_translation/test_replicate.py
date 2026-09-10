@@ -4,13 +4,10 @@ Unit tests for Replicate provider, particularly testing DeepSeek models
 
 import asyncio
 import json
-import os
-import sys
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-sys.path.insert(0, os.path.abspath("../.."))
 
 import litellm
 from litellm import completion
@@ -25,9 +22,7 @@ class TestReplicateStartingStatus:
 
     @pytest.mark.asyncio
     @patch("litellm.llms.replicate.chat.handler.get_async_httpx_client")
-    async def test_async_completion_handles_starting_status(
-        self, mock_get_client
-    ):
+    async def test_async_completion_handles_starting_status(self, mock_get_client):
         """Test that async completion polls correctly when status is 'starting'"""
         # Mock the async HTTP client
         mock_client = AsyncMock()
@@ -111,7 +106,7 @@ class TestReplicateStartingStatus:
         # Assert that we got responses
         assert result is not None
         assert result.choices[0].message.content == "Hello from DeepSeek!"
-        
+
         # Verify that GET was called 3 times (starting, processing, succeeded)
         assert mock_client.get.call_count == 3
 
@@ -184,7 +179,7 @@ class TestReplicateStartingStatus:
         # Assert results
         assert result is not None
         assert result.choices[0].message.content == "Hello DeepSeek!"
-        
+
         # Verify GET was called multiple times
         assert mock_client.get.call_count >= 1
 
@@ -197,7 +192,7 @@ class TestReplicateOutputFormats:
         from litellm.llms.replicate.chat.transformation import ReplicateConfig
 
         config = ReplicateConfig()
-        
+
         # Mock response with list output
         mock_response = Mock()
         mock_response.status_code = 200
@@ -235,7 +230,7 @@ class TestReplicateOutputFormats:
         from litellm.llms.replicate.chat.transformation import ReplicateConfig
 
         config = ReplicateConfig()
-        
+
         # Mock response with string output
         mock_response = Mock()
         mock_response.status_code = 200
@@ -276,14 +271,16 @@ def test_replicate_deepseek_integration():
     try:
         response = completion(
             model="replicate/deepseek-ai/deepseek-v3",
-            messages=[{"role": "user", "content": "Say 'Hello World' and nothing else"}],
+            messages=[
+                {"role": "user", "content": "Say 'Hello World' and nothing else"}
+            ],
             max_tokens=20,
         )
-        
+
         assert response is not None
         assert response.choices[0].message.content is not None
         assert len(response.choices[0].message.content) > 0
         print(f"Response: {response.choices[0].message.content}")
-        
+
     except Exception as e:
         pytest.fail(f"Integration test failed: {e}")

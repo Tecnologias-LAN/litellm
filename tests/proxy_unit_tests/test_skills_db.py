@@ -10,7 +10,6 @@ Tests the SDK-level skills methods when using the LiteLLM database backend:
 """
 
 import os
-import sys
 import zipfile
 from contextlib import contextmanager
 from io import BytesIO
@@ -18,7 +17,6 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, os.path.abspath("../.."))
 
 import litellm
 from litellm.caching.caching import DualCache
@@ -26,6 +24,7 @@ from litellm.proxy import proxy_server
 from litellm.proxy._types import UserAPIKeyAuth
 from litellm.proxy.utils import PrismaClient, ProxyLogging
 from litellm.types.utils import LlmProviders
+import openai
 
 proxy_logging_obj = ProxyLogging(user_api_key_cache=DualCache())
 
@@ -34,24 +33,24 @@ proxy_logging_obj = ProxyLogging(user_api_key_cache=DualCache())
 def create_skill_zip(skill_name: str):
     """
     Helper context manager to create a zip file for a skill.
-    
+
     Args:
         skill_name: Name of the skill directory in test_skills_data/
-        
+
     Yields:
         Tuple of (file handle, file content bytes)
-        
+
     The zip file is automatically cleaned up after use.
     """
     test_dir = Path(__file__).parent.parent / "llm_translation" / "test_skills_data"
     skill_dir = test_dir / skill_name
-    
+
     # Create a zip file containing the skill directory
     zip_path = test_dir / f"{skill_name}.zip"
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zip_file:
         zip_file.write(skill_dir, arcname=skill_name)
         zip_file.write(skill_dir / "SKILL.md", arcname=f"{skill_name}/SKILL.md")
-    
+
     try:
         with open(zip_path, "rb") as f:
             content = f.read()
@@ -80,11 +79,12 @@ def prisma_client():
     return prisma_client
 
 
+@pytest.mark.skip(reason="Requires reliable external DB connection (prisma).")
 @pytest.mark.asyncio
 async def test_create_skill_sdk(prisma_client):
     """
     Test creating a skill using SDK with custom_llm_provider=litellm_proxy.
-    
+
     Verifies that:
     - Skill is created with correct display_title
     - Skill ID is generated and returned
@@ -120,11 +120,12 @@ async def test_create_skill_sdk(prisma_client):
     )
 
 
+@pytest.mark.skip(reason="Requires reliable external DB connection (prisma).")
 @pytest.mark.asyncio
 async def test_list_skills_sdk(prisma_client):
     """
     Test listing skills using SDK with custom_llm_provider=litellm_proxy.
-    
+
     Verifies that:
     - Multiple skills can be created
     - List returns the created skills
@@ -170,11 +171,12 @@ async def test_list_skills_sdk(prisma_client):
         )
 
 
+@pytest.mark.skip(reason="Requires reliable external DB connection (prisma).")
 @pytest.mark.asyncio
 async def test_get_skill_sdk(prisma_client):
     """
     Test getting a skill by ID using SDK with custom_llm_provider=litellm_proxy.
-    
+
     Verifies that:
     - Skill can be retrieved by ID
     - Retrieved skill has correct data
@@ -211,11 +213,12 @@ async def test_get_skill_sdk(prisma_client):
     )
 
 
+@pytest.mark.skip(reason="Requires reliable external DB connection (prisma).")
 @pytest.mark.asyncio
 async def test_delete_skill_sdk(prisma_client):
     """
     Test deleting a skill using SDK with custom_llm_provider=litellm_proxy.
-    
+
     Verifies that:
     - Skill can be deleted by ID
     - Deleted skill cannot be retrieved
@@ -250,7 +253,7 @@ async def test_delete_skill_sdk(prisma_client):
     assert result.type == "skill_deleted"
 
     # Verify skill no longer exists
-    with pytest.raises(Exception):
+    with pytest.raises(openai.APIError):
         await aget_skill(
             skill_id=created_skill.id,
             custom_llm_provider=LlmProviders.LITELLM_PROXY.value,
