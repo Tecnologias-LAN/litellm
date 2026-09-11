@@ -1,149 +1,156 @@
-# =================================================================
-# LiteLLM Proxy Dockerfile - Optimizado para Dokploy
-# Con soporte completo para Enterprise Features
-# =================================================================
-# 
-# Este Dockerfile incluye:
-# - Código Enterprise (directorio /enterprise)
-# - Admin UI personalizable
-# - Todas las dependencias necesarias
-#
-# Para habilitar Enterprise:
-# - Configura LITELLM_LICENSE en las variables de entorno de Dokploy
-# - Opcionalmente configura DATABASE_URL y LITELLM_MASTER_KEY
-# =================================================================
+# syntax=docker/dockerfile:1.7
 
 # Base image for building
-ARG LITELLM_BUILD_IMAGE=cgr.dev/chainguard/wolfi-base
+ARG LITELLM_BUILD_IMAGE=cgr.dev/chainguard/wolfi-base@sha256:e624c5d5e42382ce7165ddafcbbf8e6769a24cbd02ea6114b880b05ae5ba2a8d
 
 # Runtime image
-ARG LITELLM_RUNTIME_IMAGE=cgr.dev/chainguard/wolfi-base
+ARG LITELLM_RUNTIME_IMAGE=cgr.dev/chainguard/wolfi-base@sha256:e624c5d5e42382ce7165ddafcbbf8e6769a24cbd02ea6114b880b05ae5ba2a8d
+ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.11.7@sha256:240fb85ab0f263ef12f492d8476aa3a2e4e1e333f7d67fbdd923d00a506a516a
+# Pinned by digest like the other base images; bump explicitly on Node upgrades.
+ARG UI_BUILD_IMAGE=node:24.19-alpine3.24@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43
+
+FROM $UV_IMAGE AS uvbin
+
+# Admin UI builder. Pinned to the build platform so the architecture-independent
+# Next.js static export compiles once natively even in a multi-arch build,
+# instead of once per target arch under QEMU.
+FROM --platform=$BUILDPLATFORM $UI_BUILD_IMAGE AS ui-builder
+
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    npm_config_fund=false \
+    npm_config_audit=false
+
+WORKDIR /ui
+
+COPY ui/litellm-dashboard/package.json ui/litellm-dashboard/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci --prefer-offline
+
+COPY ui/litellm-dashboard/ ./
+RUN npm run build
 
 # Builder stage
 FROM $LITELLM_BUILD_IMAGE AS builder
 
-# Set the working directory to /app
 WORKDIR /app
-
 USER root
 
-# Install build dependencies
-RUN apk add --no-cache bash gcc py3-pip python3 python3-dev openssl openssl-dev
+COPY --from=uvbin /uv /usr/local/bin/uv
+COPY --from=uvbin /uvx /usr/local/bin/uvx
 
-RUN python -m pip install build
+RUN apk add --no-cache \
+    bash \
+    gcc \
+    python-3.13 \
+    python-3.13-dev \
+    rust \
+    openssl \
+    openssl-dev \
+    nodejs \
+    npm \
+    libsndfile
 
-# Copy the current directory contents into the container at /app
-# Esto incluye el directorio /enterprise con todas las características enterprise
+ENV UV_PROJECT_ENVIRONMENT=/app/.venv \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=0 \
+    PATH="/app/.venv/bin:${PATH}"
+
+# Copy dependency metadata first for layer caching
+COPY pyproject.toml uv.lock ./
+COPY enterprise/pyproject.toml enterprise/
+COPY litellm-proxy-extras/pyproject.toml litellm-proxy-extras/
+
+# Install third-party dependencies (cached unless pyproject.toml/uv.lock change)
+RUN uv sync --frozen --no-install-project --no-install-workspace --no-default-groups --no-editable \
+    --extra proxy \
+    --extra proxy-runtime \
+    --extra extra_proxy \
+    --extra semantic-router \
+    --extra saml \
+    --python python3.13
+
+# Copy full source tree
 COPY . .
 
-# Build Admin UI (incluye UI Enterprise si enterprise/enterprise_ui/enterprise_colors.json existe)
-# Convert Windows line endings to Unix and make executable
+# Replace the committed UI bundle with the one built from this exact source.
+# Clearing first drops the committed bundle's content-hashed chunks that COPY
+# would otherwise leave behind alongside the fresh ones.
+RUN rm -rf litellm/proxy/_experimental/out
+COPY --from=ui-builder /ui/out/. litellm/proxy/_experimental/out/
+
+# Build Admin UI before final sync (applies the enterprise color override when present)
 RUN sed -i 's/\r$//' docker/build_admin_ui.sh && chmod +x docker/build_admin_ui.sh && ./docker/build_admin_ui.sh
 
-# Build the package
-RUN rm -rf dist/* && python -m build
+# Install project and workspace packages (fast - deps already cached)
+RUN uv sync --frozen --no-default-groups --no-editable \
+    --extra proxy \
+    --extra proxy-runtime \
+    --extra extra_proxy \
+    --extra semantic-router \
+    --extra saml \
+    --python python3.13
 
-# There should be only one wheel file now, assume the build only creates one
-RUN ls -1 dist/*.whl | head -1
+RUN HOME=/opt/prisma XDG_CACHE_HOME=/opt/prisma/.cache PRISMA_BINARY_CACHE_DIR=/opt/prisma/binaries \
+    npm_config_cache=/root/.npm \
+    prisma generate --schema=./schema.prisma
 
-# Install the package
-RUN pip install dist/*.whl
-
-# install dependencies as wheels
-RUN pip wheel --no-cache-dir --wheel-dir=/wheels/ -r requirements.txt
-
-# ensure pyjwt is used, not jwt
-RUN pip uninstall jwt -y
-RUN pip uninstall PyJWT -y
-RUN pip install PyJWT==2.9.0 --no-cache-dir
+RUN sed -i 's/\r$//' docker/entrypoint.sh && chmod +x docker/entrypoint.sh && \
+    sed -i 's/\r$//' docker/prod_entrypoint.sh && chmod +x docker/prod_entrypoint.sh && \
+    sed -i 's/\r$//' docker/init-enterprise.sh && chmod +x docker/init-enterprise.sh
 
 # Runtime stage
 FROM $LITELLM_RUNTIME_IMAGE AS runtime
 
-# Ensure runtime stage runs as root
 USER root
 
-# Install runtime dependencies (libsndfile needed for audio processing on ARM64)
-RUN apk add --no-cache bash openssl tzdata nodejs npm python3 py3-pip libsndfile && \
-    npm install -g npm@latest tar@7.5.7 glob@11.1.0 @isaacs/brace-expansion@5.0.1 && \
-    # SECURITY FIX: npm bundles tar, glob, and brace-expansion at multiple nested
-    # levels inside its dependency tree. `npm install -g <pkg>` only creates a
-    # SEPARATE global package, it does NOT replace npm's internal copies.
-    # We must find and replace EVERY copy inside npm's directory.
-    GLOBAL="$(npm root -g)" && \
-    find "$GLOBAL/npm" -type d -name "tar" -path "*/node_modules/tar" | while read d; do \
-        rm -rf "$d" && cp -rL "$GLOBAL/tar" "$d"; \
-    done && \
-    find "$GLOBAL/npm" -type d -name "glob" -path "*/node_modules/glob" | while read d; do \
-        rm -rf "$d" && cp -rL "$GLOBAL/glob" "$d"; \
-    done && \
-    find "$GLOBAL/npm" -type d -name "brace-expansion" -path "*/node_modules/@isaacs/brace-expansion" | while read d; do \
-        rm -rf "$d" && cp -rL "$GLOBAL/@isaacs/brace-expansion" "$d"; \
-    done && \
-    npm cache clean --force
+# node (without npm) is required by the prisma CLI at runtime
+RUN apk add --no-cache bash openssl tzdata nodejs python-3.13 libsndfile
 
 WORKDIR /app
+ENV PATH="/app/.venv/bin:${PATH}" \
+    PRISMA_BINARY_CACHE_DIR=/opt/prisma/binaries \
+    PRISMA_CLI_PATH=/opt/prisma/binaries/node_modules/.bin/prisma \
+    PRISMA_CLI_QUERY_ENGINE_TYPE=binary \
+    PRISMA_OFFLINE_MODE=true
 
-# Copy the current directory contents into the container at /app
-# Incluye el directorio /enterprise para funcionalidades enterprise
-COPY . .
-RUN ls -la /app
+# Copy only what runtime needs. The application is installed inside the venv;
+# the rest of the builder's /app is source and build metadata that must not
+# ship (manifest-scanning tools attribute everything in it to this image).
+# entrypoint.sh invokes litellm/proxy/prisma_migration.py by source path.
+COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/docker /app/docker
+COPY --from=builder /app/schema.prisma /app/schema.prisma
+COPY --from=builder /app/litellm/proxy/prisma_migration.py /app/litellm/proxy/prisma_migration.py
+# enterprise/ is imported by source path at runtime (proxy_cli puts the
+# working directory on sys.path; litellm/proxy/hooks resolves
+# enterprise.enterprise_hooks from it)
+COPY --from=builder /app/enterprise /app/enterprise
+COPY --from=builder /app/litellm-proxy-extras /app/litellm-proxy-extras
+# Prisma CLI + engines are baked under /opt/prisma, a fixed path every
+# runtime uid can read and that no cache volume mount shadows. The paths are
+# pinned via PRISMA_BINARY_CACHE_DIR / PRISMA_CLI_PATH and recorded into the
+# generated client at build time, so `prisma migrate deploy` on a fresh
+# database needs no npm and no network access (#33650, #24554).
+COPY --from=builder /opt/prisma /opt/prisma
 
-# Copy the built wheel from the builder stage to the runtime stage; assumes only one wheel file is present
-COPY --from=builder /app/dist/*.whl .
-COPY --from=builder /wheels/ /wheels/
-
-# Install the built wheel using pip; again using a wildcard if it's the only file
-RUN pip install *.whl /wheels/* --no-index --find-links=/wheels/ && rm -f *.whl && rm -rf /wheels
-
-# Replace the nodejs-wheel-binaries bundled node with the system node (fixes CVE-2025-55130)
-RUN NODEJS_WHEEL_NODE=$(find /usr/lib -path "*/nodejs_wheel/bin/node" 2>/dev/null) && \
-    if [ -n "$NODEJS_WHEEL_NODE" ]; then cp /usr/bin/node "$NODEJS_WHEEL_NODE"; fi
-
-# Remove test files and keys from dependencies
-RUN find /usr/lib -type f -path "*/tornado/test/*" -delete && \
-    find /usr/lib -type d -path "*/tornado/test" -delete
-
-# SECURITY FIX: nodejs-wheel-binaries (pip package used by Prisma) bundles a complete
-# npm with old vulnerable deps at /usr/lib/python3.*/site-packages/nodejs_wheel/.
-# Patch every copy of tar, glob, and brace-expansion inside that tree.
-RUN GLOBAL="$(npm root -g)" && \
-    find /usr/lib -path "*/nodejs_wheel/*/node_modules/tar" -type d | while read d; do \
-        rm -rf "$d" && cp -rL "$GLOBAL/tar" "$d"; \
-    done && \
-    find /usr/lib -path "*/nodejs_wheel/*/node_modules/glob" -type d | while read d; do \
-        rm -rf "$d" && cp -rL "$GLOBAL/glob" "$d"; \
-    done && \
-    find /usr/lib -path "*/nodejs_wheel/*/node_modules/@isaacs/brace-expansion" -type d | while read d; do \
-        rm -rf "$d" && cp -rL "$GLOBAL/@isaacs/brace-expansion" "$d"; \
-    done
-
-# Install semantic_router and aurelio-sdk using script
-# Convert Windows line endings to Unix and make executable
-RUN sed -i 's/\r$//' docker/install_auto_router.sh && chmod +x docker/install_auto_router.sh && ./docker/install_auto_router.sh
-
-# Generate prisma client using the correct schema
-RUN prisma generate --schema=./litellm/proxy/schema.prisma
-# Convert Windows line endings to Unix for entrypoint scripts
-RUN sed -i 's/\r$//' docker/entrypoint.sh && chmod +x docker/entrypoint.sh
-RUN sed -i 's/\r$//' docker/prod_entrypoint.sh && chmod +x docker/prod_entrypoint.sh
-RUN sed -i 's/\r$//' docker/init-enterprise.sh && chmod +x docker/init-enterprise.sh
+RUN find /app/.venv -type f -path "*/tornado/test/*" -delete && \
+    find /app/.venv -type d -path "*/tornado/test" -delete && \
+    chmod -R a+rX /opt/prisma && \
+    test -x /opt/prisma/binaries/node_modules/.bin/prisma && \
+    test -f /opt/prisma/binaries/node_modules/prisma/build/index.js && \
+    python -c "from prisma.client import BINARY_PATHS; paths = list(BINARY_PATHS.query_engine.values()); assert paths and all(p.startswith('/opt/prisma/') for p in paths), paths"
 
 EXPOSE 4000/tcp
 
-# NOTA: LiteLLM v1.100.x elimino docker/supervisord.conf del repo, por eso ya
-# no se instala supervisor ni se copia ese archivo (el build fallaria).
-
-# Enterprise mode: habilitado de forma permanente en el codigo
-# (ENTERPRISE_ALWAYS_ON en litellm/proxy/auth/litellm_license.py).
-# Esta variable se mantiene solo por compatibilidad; ya no es necesaria.
+# =================================================================
+# MODIFICACION Tecnologias-LAN (Dokploy)
+# Enterprise esta habilitado de forma PERMANENTE en el codigo fuente:
+#   litellm/proxy/auth/litellm_license.py -> ENTERPRISE_ALWAYS_ON = True
+# Estas variables se mantienen solo por compatibilidad; el modo Enterprise
+# ya no depende de ellas.
+# Healthcheck desactivado a proposito: Dokploy usa chequeo de puerto.
+# =================================================================
 ENV LITELLM_MODE=PRODUCTION
 ENV LITELLM_FORCE_ENTERPRISE=true
 
-# Health check disabled - Dokploy will use port check instead
-# HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
-#     CMD curl -f -s http://localhost:4000/health || exit 1
-
 ENTRYPOINT ["docker/prod_entrypoint.sh"]
-
 CMD ["--port", "4000"]

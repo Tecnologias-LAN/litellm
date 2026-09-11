@@ -12,6 +12,10 @@
 # Este script solo informa el estado en los logs de arranque.
 # =================================================================
 
+# El runtime del Dockerfile oficial (v1.100.x) NO copia el arbol de fuentes:
+# litellm se instala dentro del venv en /app/.venv. Por eso se valida el flag
+# consultando al propio modulo instalado, con respaldo al archivo fuente si
+# se ejecuta desde el repo.
 LICENSE_FILE="litellm/proxy/auth/litellm_license.py"
 
 echo ""
@@ -20,9 +24,10 @@ echo "🚀 LiteLLM Enterprise Status"
 echo "=========================================="
 echo ""
 
-if grep -q "ENTERPRISE_ALWAYS_ON: bool = True" "$LICENSE_FILE" 2>/dev/null; then
+if python -c "from litellm.proxy.auth.litellm_license import ENTERPRISE_ALWAYS_ON; raise SystemExit(0 if ENTERPRISE_ALWAYS_ON else 1)" 2>/dev/null \
+   || grep -q "ENTERPRISE_ALWAYS_ON: bool = True" "$LICENSE_FILE" 2>/dev/null; then
     echo "✅ ENTERPRISE MODE ACTIVADO (permanente, hardcodeado)"
-    echo "   Fuente: $LICENSE_FILE (ENTERPRISE_ALWAYS_ON=True)"
+    echo "   Fuente: litellm.proxy.auth.litellm_license (ENTERPRISE_ALWAYS_ON=True)"
     echo "   No requiere licencia ni variables de entorno."
     echo "   No se contacta https://license.litellm.ai"
     echo ""
